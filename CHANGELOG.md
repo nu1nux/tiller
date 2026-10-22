@@ -22,6 +22,17 @@ beta shows what `## Unreleased` holds at the time.
   tint and the field's hint fade into their new values, and the effort
   button fades in for a model that has efforts. Reduce Motion turns the
   motion off.
+- A `/name` at the start of the agent panel's message field that calls a
+  skill shows as a token, in the accent on a soft plate. The skill list
+  rises in from the field and shows what was typed in the accent in each
+  name, and a message taller than the field fades out at the edge with
+  more text beyond it.
+- Type `@` in the agent panel's message field to mention another open
+  tab: pick one from the list, which shows each tab's icon and address,
+  and its address goes in the message.
+- A small ring before the microphone button shows how much of the model's
+  context window the chat takes, once the agent reports it, turning
+  orange from 80% and red from 95%. Its tooltip gives the numbers.
 
 ## 0.4.2
 

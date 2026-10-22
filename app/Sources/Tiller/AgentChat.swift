@@ -15,6 +15,8 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     var onModel: ((NSView) -> Void)?
     var onEffort: ((NSView) -> Void)?
     var onTools: ((NSView) -> Void)?
+    /// The window's open tabs, which `@` in the message field offers.
+    var openTabs: (() -> [AgentTabMention])?
 
     let id: String
     /// Nil until the first message.
@@ -66,6 +68,9 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     private lazy var skillCompletion = SkillCompletion(textView: composer.textView) { [weak self] in
         self?.availableSkills ?? []
     }
+    private lazy var mentionCompletion = MentionCompletion(textView: composer.textView) { [weak self] in
+        self?.openTabs?() ?? []
+    }
     private let promptSearch = PromptSearch()
     /// Up and Down's place among the sent messages, nil while the field
     /// holds what is being written.
@@ -75,7 +80,9 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     private var draft = ""
     /// The skills the running agent said it loaded. Until then, `/` offers
     /// what Tiller finds on disk.
-    private var loadedSkills: [AgentSkill]?
+    private var loadedSkills: [AgentSkill]? {
+        didSet { composer.skillsChanged() }
+    }
     /// The agent a new chat was made for, such as a scheduled run's.
     private let presetKind: AgentChoice?
     /// Called once when a scheduled run's turn ends, with how it went.
@@ -337,6 +344,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
             self.window?.makeFirstResponder(self.composer.textView)
         }
         composer.onImages = { [weak self] images in self?.attach(images) }
+        composer.isSkill = { [weak self] name in self?.availableSkills.contains { $0.name == name } ?? false }
         composer.onOpenImage = { [weak self] index in
             guard let self else { return }
             self.preview(self.composer.attachments.map(\.url), at: index)
@@ -352,7 +360,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
         scrollView.wantsLayer = true
         scrollView.layer?.mask = edgeFade
 
-        for view in [scrollView, separator, emptyState, scrollDownButton, queueView, tabBarHost, composer, skillCompletion.picker, promptSearch] as [NSView] {
+        for view in [scrollView, separator, emptyState, scrollDownButton, queueView, tabBarHost, composer, skillCompletion.picker, mentionCompletion.picker, promptSearch] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -399,6 +407,10 @@ final class AgentChatView: NSView, NSTextViewDelegate {
             skillCompletion.picker.leadingAnchor.constraint(equalTo: composer.leadingAnchor),
             skillCompletion.picker.trailingAnchor.constraint(equalTo: composer.trailingAnchor),
             skillCompletion.picker.bottomAnchor.constraint(equalTo: composer.topAnchor, constant: -6),
+
+            mentionCompletion.picker.leadingAnchor.constraint(equalTo: composer.leadingAnchor),
+            mentionCompletion.picker.trailingAnchor.constraint(equalTo: composer.trailingAnchor),
+            mentionCompletion.picker.bottomAnchor.constraint(equalTo: composer.topAnchor, constant: -6),
 
             promptSearch.leadingAnchor.constraint(equalTo: composer.leadingAnchor),
             promptSearch.trailingAnchor.constraint(equalTo: composer.trailingAnchor),
@@ -480,6 +492,8 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     @objc private func currentAgentChanged(_ notification: Notification) {
         // Options picked for one agent don't carry over to another.
         if conversation == nil, presetKind == nil { pickedOptions = nil }
+        // Another agent has other skills.
+        composer.skillsChanged()
         if session == nil { showIdle() }
     }
 
@@ -496,6 +510,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     func setTextForTesting(_ text: String) {
         composer.text = text
         skillCompletion.update()
+        mentionCompletion.update()
     }
 
     /// Pastes the clipboard into the composer twice, as Cmd+V would, then
@@ -548,7 +563,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     /// stops a running turn. Up on the first line and Down on the last go
     /// through the messages sent before.
     func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        if skillCompletion.handle(selector) { return true }
+        if skillCompletion.handle(selector) || mentionCompletion.handle(selector) { return true }
         switch selector {
         case #selector(NSResponder.moveUp(_:)):
             return stepThroughSent(older: true)
@@ -583,6 +598,12 @@ final class AgentChatView: NSView, NSTextViewDelegate {
         recalled = nil
         composer.textChanged()
         skillCompletion.update()
+        mentionCompletion.update()
+    }
+
+    /// The caret moving into or out of an `@` word opens or closes the tabs.
+    func textViewDidChangeSelection(_ notification: Notification) {
+        mentionCompletion.update()
     }
 
     // MARK: Skills
@@ -637,6 +658,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
         composer.text = ""
         composer.attachments = []
         skillCompletion.hide()
+        mentionCompletion.hide()
         if isBusy {
             if direct {
                 // A second Ctrl+Enter before the turn has stopped joins the first.
@@ -683,6 +705,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     private func recall(_ text: String, focus: Bool) {
         recalled = nil
         skillCompletion.hide()
+        mentionCompletion.hide()
         composer.text = text
         if focus { window?.makeFirstResponder(composer.textView) }
         composer.textView.setSelectedRange(NSRange(location: (text as NSString).length, length: 0))
@@ -694,6 +717,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
         let prompts = profile.agentHistory.prompts
         guard !prompts.isEmpty else { return NSSound.beep() }
         skillCompletion.hide()
+        mentionCompletion.hide()
         promptSearch.show(prompts.reversed())
     }
 
@@ -1036,6 +1060,8 @@ final class AgentChatView: NSView, NSTextViewDelegate {
             save(conversation)
         case .skills(let skills):
             loadedSkills = skills
+        case .contextUsage(let used, let window):
+            composer.showContextUsage(used: used, window: window)
         case .textStarted:
             liveTextBuffer = ""
             let label = AgentMarkdown.label("")
@@ -1373,7 +1399,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     private func showIdle() {
         setBusy(false)
         setStatus(session == nil ? "" : "Ready", busy: false)
-        composer.placeholder = "Ask \(profile.providers.displayName(choice)) about this page, / for skills"
+        composer.placeholder = "Ask \(profile.providers.displayName(choice)) about this page, @ for tabs, / for skills"
         composer.shortPlaceholder = "Ask \(profile.providers.displayName(choice))…"
         emptyState.show(choice, name: profile.providers.displayName(choice))
         let showEmpty = transcript.isEmpty && recordsLoaded

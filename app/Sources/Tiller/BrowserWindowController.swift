@@ -2442,6 +2442,14 @@ extension BrowserWindowController {
         return "[Tiller: selected tab \(tab.id), \"\(tab.displayTitle)\", \(tab.isBlank ? "about:blank" : tab.url)]"
     }
 
+    func agentPanelTabs(_ panel: AgentPanelView) -> [AgentTabMention] {
+        // The tab in front first, then the others in the window's order.
+        let open = tabs.filter { !$0.isBlank }
+        return (open.filter { $0 === selectedTab } + open.filter { $0 !== selectedTab }).map {
+            AgentTabMention(title: $0.displayTitle, url: $0.url, favicon: $0.favicon, isSelected: $0 === selectedTab)
+        }
+    }
+
     /// Widens the divider's grab area into the panel. The divider is a point
     /// wide, and the page beside it takes the mouse for itself.
     func splitView(

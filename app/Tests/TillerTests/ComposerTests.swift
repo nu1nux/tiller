@@ -138,6 +138,82 @@ struct ComposerTests {
         #expect(composer.effortButton.isHidden)
     }
 
+    @Test func skillNameReadsAsAToken() {
+        let (window, composer) = makeComposer()
+        defer { window.close() }
+        composer.isSkill = { $0 == "review" }
+        composer.text = "/review the page"
+        #expect(composer.textView.tokenLength == 7)
+
+        composer.text = "/reviewing"
+        #expect(composer.textView.tokenLength == 0)
+
+        // Only at the very start.
+        composer.text = "please /review"
+        #expect(composer.textView.tokenLength == 0)
+
+        composer.text = "/review"
+        composer.isSkill = { _ in false }
+        composer.skillsChanged()
+        #expect(composer.textView.tokenLength == 0)
+    }
+
+    @Test func mentionIsTheAtWordAtTheCaret() {
+        func mention(_ text: String) -> NSRange? {
+            MentionCompletion.mention(in: text, caret: NSRange(location: (text as NSString).length, length: 0))
+        }
+        #expect(mention("@") == NSRange(location: 0, length: 1))
+        #expect(mention("compare with @git") == NSRange(location: 13, length: 4))
+        // Not after a word, as in an email address, nor once a space follows.
+        #expect(mention("me@example") == nil)
+        #expect(mention("@github ") == nil)
+        #expect(MentionCompletion.mention(in: "@git", caret: NSRange(location: 0, length: 4)) == nil)
+    }
+
+    @Test func mentionMatchesTitleFirstThenAddress() {
+        let tabs = [
+            AgentTabMention(title: "Pull requests", url: "https://github.com/pulls", favicon: nil, isSelected: false),
+            AgentTabMention(title: "GitHub", url: "https://github.com", favicon: nil, isSelected: true),
+            AgentTabMention(title: "Docs", url: "https://example.com", favicon: nil, isSelected: false),
+        ]
+        #expect(MentionCompletion.matches(tabs, "git").map(\.title) == ["GitHub", "Pull requests"])
+        #expect(MentionCompletion.matches(tabs, "").count == 3)
+        #expect(MentionCompletion.matches(tabs, "zzz").isEmpty)
+    }
+
+    @Test func pickingATabPutsItsAddressInPlaceOfTheWord() {
+        let (window, composer) = makeComposer()
+        defer { window.close() }
+        let tab = AgentTabMention(title: "GitHub", url: "https://github.com/", favicon: nil, isSelected: false)
+        let completion = MentionCompletion(textView: composer.textView) { [tab] }
+        composer.text = "compare with @git"
+        composer.textView.setSelectedRange(NSRange(location: 17, length: 0))
+        completion.update()
+        #expect(completion.isShown)
+        #expect(completion.handle(#selector(NSResponder.insertTab(_:))))
+        #expect(composer.text == "compare with https://github.com/ ")
+        #expect(!completion.isShown)
+    }
+
+    @Test func contextMeterShowsOnceUsageComes() {
+        let (window, composer) = makeComposer()
+        defer { window.close() }
+        #expect(composer.contextMeter.isHidden)
+        composer.showContextUsage(used: 64_500, window: 258_000)
+        #expect(!composer.contextMeter.isHidden)
+        #expect(composer.contextMeter.fraction == 0.25)
+        #expect(composer.contextMeter.toolTip == "Context window: 25% used\n65K of 258K tokens")
+        #expect(composer.contextMeter.frame.maxX <= composer.dictateButton.frame.minX)
+    }
+
+    @Test func tokenCounts() {
+        #expect(ContextMeter.tokens(950) == "950")
+        #expect(ContextMeter.tokens(1000) == "1K")
+        #expect(ContextMeter.tokens(12_340) == "12K")
+        #expect(ContextMeter.tokens(1_000_000) == "1M")
+        #expect(ContextMeter.tokens(1_500_000) == "1.5M")
+    }
+
     @Test func effortTitles() {
         #expect(AgentModelOptions.effortTitle("low") == "Low")
         #expect(AgentModelOptions.effortTitle("xhigh") == "Extra high")

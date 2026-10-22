@@ -184,6 +184,10 @@ enum AgentEvent {
     case error(String)
     /// Something to note in the transcript, such as fast mode being refused.
     case notice(String)
+    /// How much of the model's context window the conversation takes, in
+    /// tokens, as of the model's latest call (Codex, and the CLIs that print
+    /// Claude Code's usage).
+    case contextUsage(used: Int, window: Int)
     /// `stopped` means the user interrupted the turn.
     case turnFinished(error: String?, stopped: Bool)
     case exited(message: String?)
@@ -231,6 +235,10 @@ final class AgentSession {
     private var generation = 0
     private var interruptTimer: Timer?
     private var interrupted = false
+    /// The tokens the model's latest call took in and wrote, and the size
+    /// of its context window once a result names it (Claude Code's stream).
+    private var contextTokens = 0
+    private var contextWindow: Int?
 
     // Codex app server state.
     private var nextRequestID = 0
@@ -588,6 +596,16 @@ final class AgentSession {
             default: break
             }
         case "assistant":
+            // A subagent's calls have contexts of their own.
+            if message["parent_tool_use_id"] as? String == nil,
+                let usage = (message["message"] as? [String: Any])?["usage"] as? [String: Any] {
+                let used = ["input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"]
+                    .reduce(0) { $0 + (usage[$1] as? Int ?? 0) }
+                if used > 0, used != contextTokens {
+                    contextTokens = used
+                    if let contextWindow { onEvent?(.contextUsage(used: used, window: contextWindow)) }
+                }
+            }
             let content = (message["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
             for block in content {
                 switch block["type"] as? String {
@@ -616,6 +634,14 @@ final class AgentSession {
                 ))
             }
         case "result":
+            // The model that took in the most is the turn's own, rather
+            // than one the CLI used on the side, such as for a title.
+            let models = (message["modelUsage"] as? [String: Any] ?? [:]).values.compactMap { $0 as? [String: Any] }
+            let main = models.max { Self.inputTokens($0) < Self.inputTokens($1) }
+            if let window = main?["contextWindow"] as? Int, window > 0 {
+                contextWindow = window
+                if contextTokens > 0 { onEvent?(.contextUsage(used: contextTokens, window: window)) }
+            }
             let failed = message["is_error"] as? Bool ?? false
             let subtype = message["subtype"] as? String ?? "success"
             var error: String?
@@ -631,6 +657,11 @@ final class AgentSession {
         default:
             break
         }
+    }
+
+    /// What a model in a result's `modelUsage` took in.
+    private static func inputTokens(_ model: [String: Any]) -> Int {
+        ["inputTokens", "cacheReadInputTokens", "cacheCreationInputTokens"].reduce(0) { $0 + (model[$1] as? Int ?? 0) }
     }
 
     private func started(_ id: String) {
@@ -784,6 +815,12 @@ final class AgentSession {
         case "item/started", "item/completed":
             guard let item = params["item"] as? [String: Any] else { return }
             handleCodexItem(item, completed: method == "item/completed")
+        case "thread/tokenUsage/updated":
+            let usage = params["tokenUsage"] as? [String: Any]
+            guard let window = usage?["modelContextWindow"] as? Int, window > 0,
+                let used = (usage?["last"] as? [String: Any])?["totalTokens"] as? Int
+            else { return }
+            onEvent?(.contextUsage(used: used, window: window))
         case "thread/name/updated":
             if let name = params["threadName"] as? String, !name.isEmpty { onEvent?(.renamed(name)) }
         case "item/agentMessage/delta":

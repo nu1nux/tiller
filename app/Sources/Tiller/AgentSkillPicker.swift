@@ -1,20 +1,36 @@
 import AppKit
 
+/// One choice in a `CompletionPicker`: `prefix` and `name` on top, with an
+/// optional hint after them, a badge at the end and an icon before, and
+/// `detail` under them.
+struct CompletionItem {
+    var prefix: String
+    var name: String
+    var hint: String?
+    var badge: String?
+    var detail: String
+    var icon: NSImage?
+}
+
 /// The list that opens above the message field while it holds a `/` and the
-/// start of a skill's name: matching skills with what they do. Arrow keys
-/// move the selection, and Tab, Return or a click completes the name. It
-/// sits on the same material as the address bar's suggestions.
-final class SkillPicker: NSVisualEffectView {
-    var onPick: ((AgentSkill) -> Void)?
+/// start of a skill's name, or an `@` and part of a tab's: what matches,
+/// with what each is. Arrow keys move the selection, and Tab, Return or a
+/// click completes it. What was typed shows in the accent in each name. It
+/// sits on the same material as the address bar's suggestions, and rises a
+/// little as it fades in.
+final class CompletionPicker: NSVisualEffectView {
+    /// Called with the place of the item clicked in what `show` was given.
+    var onPick: ((Int) -> Void)?
 
     private let stack = NSStackView()
-    private var rows: [SkillPickerRow] = []
-    private(set) var skills: [AgentSkill] = []
+    private var rows: [CompletionPickerRow] = []
+    private(set) var items: [CompletionItem] = []
     private var selected = 0
-    private static let maxRows = 7
+    static let maxRows = 7
 
-    override init(frame: NSRect) {
-        super.init(frame: frame)
+    /// `label` names the list for VoiceOver.
+    init(label: String) {
+        super.init(frame: .zero)
         wantsLayer = true
         material = .popover
         blendingMode = .withinWindow
@@ -31,39 +47,40 @@ final class SkillPicker: NSVisualEffectView {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
         ])
         setAccessibilityRole(.list)
-        setAccessibilityLabel("Skills")
+        setAccessibilityLabel(label)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    /// Skills whose name starts with `query` come first, then those that
-    /// have it elsewhere in the name. Returns whether any matched.
+    /// Lists `matches`, the first `maxRows` of them, with `query` in the
+    /// accent in each name, and hides when there are none. Returns whether
+    /// any are listed.
     @discardableResult
-    func show(_ all: [AgentSkill], matching query: String) -> Bool {
-        let query = query.lowercased()
-        let starts = all.filter { $0.name.lowercased().hasPrefix(query) }
-        let contains = query.isEmpty ? [] : all.filter { !$0.name.lowercased().hasPrefix(query) && $0.name.lowercased().contains(query) }
-        let matches = Array((starts + contains).prefix(Self.maxRows))
-        if matches.map(\.name) != skills.map(\.name) {
-            skills = matches
+    func show(_ matches: [CompletionItem], highlighting query: String) -> Bool {
+        let matches = Array(matches.prefix(Self.maxRows))
+        if matches.map({ $0.name + "\n" + $0.detail }) != items.map({ $0.name + "\n" + $0.detail }) {
+            items = matches
             selected = 0
             rows.forEach { $0.removeFromSuperview() }
-            rows = matches.enumerated().map { index, skill in
-                let row = SkillPickerRow(skill: skill)
+            rows = matches.enumerated().map { index, item in
+                let row = CompletionPickerRow(item: item)
                 row.onHover = { [weak self] in self?.select(index) }
-                row.onClick = { [weak self] in self?.onPick?(skill) }
+                row.onClick = { [weak self] in self?.onPick?(index) }
                 stack.addArrangedSubview(row)
                 row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
                 return row
             }
             select(0)
         }
+        for row in rows { row.highlight(query) }
         if isHidden && !matches.isEmpty && !Theme.reduceMotion {
-            // It fades in over the transcript rather than popping up. It
-            // hides at once, as the keys it takes go back to the field then.
+            // It fades in over the transcript, rising from the field, rather
+            // than popping up. It hides at once, as the keys it takes go
+            // back to the field then.
             alphaValue = 0
             isHidden = false
             withEasing(Theme.Duration.quick) { animator().alphaValue = 1 }
+            dropIn(distance: -6, duration: Theme.Duration.slide)
         } else {
             isHidden = matches.isEmpty
             alphaValue = 1
@@ -72,17 +89,38 @@ final class SkillPicker: NSVisualEffectView {
     }
 
     func moveSelection(by offset: Int) {
-        guard !skills.isEmpty else { return }
-        select((selected + offset + skills.count) % skills.count)
+        guard !items.isEmpty else { return }
+        select((selected + offset + items.count) % items.count)
         // The keyboard stays in the message field, so VoiceOver is told
-        // which skill Tab or Return would now insert.
+        // which item Tab or Return would now insert.
         NSAccessibility.post(element: self, notification: .announcementRequested, userInfo: [
-            .announcement: "/" + skills[selected].name,
+            .announcement: items[selected].prefix + items[selected].name,
             .priority: NSAccessibilityPriorityLevel.medium.rawValue,
         ])
     }
 
-    var selectedSkill: AgentSkill? { skills.indices.contains(selected) ? skills[selected] : nil }
+    /// The place of the item Tab or Return would insert.
+    var selectedIndex: Int? { items.indices.contains(selected) ? selected : nil }
+
+    /// The text view's `doCommandBy` while the list shows: Up and Down move
+    /// through it, Tab and Return pick the selected item as a click does,
+    /// and Escape calls `dismiss`. Returns whether the list took the command.
+    func handle(_ selector: Selector, dismiss: () -> Void) -> Bool {
+        guard !isHidden else { return false }
+        switch selector {
+        case #selector(NSResponder.moveUp(_:)):
+            moveSelection(by: -1)
+        case #selector(NSResponder.moveDown(_:)):
+            moveSelection(by: 1)
+        case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertNewline(_:)):
+            if let selectedIndex { onPick?(selectedIndex) }
+        case #selector(NSResponder.cancelOperation(_:)):
+            dismiss()
+        default:
+            return false
+        }
+        return true
+    }
 
     private func select(_ index: Int) {
         selected = index
@@ -118,14 +156,18 @@ final class SkillPicker: NSVisualEffectView {
     }
 }
 
-/// One skill in the picker: `/name`, its argument hint, and its description.
-private final class SkillPickerRow: NSView {
+/// One item in the picker: a skill's `/name`, argument hint and
+/// description, or a tab's `@title`, icon and address.
+private final class CompletionPickerRow: NSView {
     var onHover: (() -> Void)?
     var onClick: (() -> Void)?
     var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true } } }
     private var isPressed = false { didSet { if isPressed != oldValue { needsDisplay = true } } }
 
     private let name: NSTextField
+    private let item: CompletionItem
+    /// What the name shows in the accent.
+    private var query: String?
     private let hint: NSTextField
     private let badge: NSTextField
     private let hasHint: Bool
@@ -133,12 +175,17 @@ private final class SkillPickerRow: NSView {
     private static let spacing: CGFloat = 6
     private static let sideInset: CGFloat = 8
 
-    init(skill: AgentSkill) {
-        let argumentHint = skill.argumentHint ?? ""
-        name = NSTextField(labelWithString: "/" + skill.name)
+    private let icon: NSImageView?
+    private static let iconSide: CGFloat = 16
+
+    init(item: CompletionItem) {
+        let argumentHint = item.hint ?? ""
+        name = NSTextField(labelWithString: item.prefix + item.name)
+        self.item = item
         hint = NSTextField(labelWithString: argumentHint)
-        badge = NSTextField(labelWithString: skill.origin == .library ? "Tiller" : "")
+        badge = NSTextField(labelWithString: item.badge ?? "")
         hasHint = !argumentHint.isEmpty
+        icon = item.icon.map { NSImageView(image: $0) }
         super.init(frame: .zero)
         wantsLayer = true
         name.font = .systemFont(ofSize: Theme.FontSize.body, weight: .medium)
@@ -155,10 +202,17 @@ private final class SkillPickerRow: NSView {
         hint.isHidden = !hasHint
         badge.font = .systemFont(ofSize: Theme.FontSize.caption, weight: .medium)
         badge.textColor = Theme.secondaryText
-        badge.isHidden = skill.origin != .library
+        badge.isHidden = item.badge == nil
         let top = NSStackView(views: [name, hint, NSView(), badge])
+        if let icon {
+            icon.imageScaling = .scaleProportionallyUpOrDown
+            icon.contentTintColor = Theme.secondaryText
+            icon.widthAnchor.constraint(equalToConstant: Self.iconSide).isActive = true
+            icon.heightAnchor.constraint(equalToConstant: Self.iconSide).isActive = true
+            top.insertArrangedSubview(icon, at: 0)
+        }
         top.spacing = Self.spacing
-        let description = NSTextField(labelWithString: skill.description.isEmpty ? " " : skill.description)
+        let description = NSTextField(labelWithString: item.detail.isEmpty ? " " : item.detail)
         description.font = .systemFont(ofSize: Theme.FontSize.caption)
         description.textColor = Theme.secondaryText
         description.lineBreakMode = .byTruncatingTail
@@ -176,12 +230,33 @@ private final class SkillPickerRow: NSView {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.sideInset),
             top.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
-        toolTip = skill.description.isEmpty ? nil : skill.description
+        toolTip = item.detail.isEmpty ? nil : item.detail
         setAccessibilityRole(.button)
-        setAccessibilityLabel("/" + skill.name)
+        setAccessibilityLabel(item.prefix + item.name)
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    /// Shows the first place `query` is in the name in the accent, and the
+    /// rest of the name in the text's color.
+    func highlight(_ query: String) {
+        guard query != self.query else { return }
+        self.query = query
+        let font = NSFont.systemFont(ofSize: Theme.FontSize.body, weight: .medium)
+        let truncates = NSMutableParagraphStyle()
+        truncates.lineBreakMode = .byTruncatingTail
+        let title = NSMutableAttributedString(string: item.prefix + item.name, attributes: [
+            .font: font, .foregroundColor: Theme.text, .paragraphStyle: truncates,
+        ])
+        let range = (item.name as NSString).range(of: query, options: .caseInsensitive)
+        if !query.isEmpty, range.location != NSNotFound {
+            title.addAttributes([
+                .foregroundColor: Theme.accentColor,
+                .font: NSFont.systemFont(ofSize: Theme.FontSize.body, weight: .semibold),
+            ], range: NSRange(location: range.location + (item.prefix as NSString).length, length: range.length))
+        }
+        name.attributedStringValue = title
+    }
 
     /// Shows the hint only when the name, the hint and the badge all fit on
     /// the line. Decided before the stack lays out, so it lays out once.
@@ -190,7 +265,8 @@ private final class SkillPickerRow: NSView {
             let available = bounds.width - 2 * Self.sideInset
             // The spacer between the hint and the badge adds one gap even at zero width.
             let badgeWidth = badge.isHidden ? 0 : Self.spacing + ceil(badge.intrinsicContentSize.width)
-            let needed = ceil(name.intrinsicContentSize.width) + Self.spacing
+            let iconWidth = icon == nil ? 0 : Self.iconSide + Self.spacing
+            let needed = iconWidth + ceil(name.intrinsicContentSize.width) + Self.spacing
                 + ceil(hint.intrinsicContentSize.width) + Self.spacing + badgeWidth
             let hide = needed > available
             if hint.isHidden != hide { hint.isHidden = hide }
@@ -241,18 +317,23 @@ private final class SkillPickerRow: NSView {
 /// and the scheduled prompt editor both use it.
 @MainActor
 final class SkillCompletion {
-    let picker = SkillPicker()
+    let picker = CompletionPicker(label: "Skills")
     /// What `/` can call, read when the picker opens.
     var skills: () -> [AgentSkill]
     private weak var textView: NSTextView?
     /// The skills offered while the picker is open.
     private var offered: [AgentSkill]?
+    /// The skills listed, in the picker's order.
+    private var listed: [AgentSkill] = []
 
     init(textView: NSTextView, skills: @escaping () -> [AgentSkill]) {
         self.textView = textView
         self.skills = skills
         picker.isHidden = true
-        picker.onPick = { [weak self] skill in self?.complete(skill) }
+        picker.onPick = { [weak self] index in
+            guard let self, self.listed.indices.contains(index) else { return }
+            self.complete(self.listed[index])
+        }
     }
 
     var isShown: Bool { !picker.isHidden }
@@ -262,7 +343,20 @@ final class SkillCompletion {
         guard let text = textView?.string, text.hasPrefix("/"), !text.contains(where: \.isWhitespace) else { return hide() }
         let skills = offered ?? self.skills()
         offered = skills
-        picker.show(skills, matching: String(text.dropFirst()))
+        let query = String(text.dropFirst())
+        listed = Array(Self.matches(skills, query).prefix(CompletionPicker.maxRows))
+        picker.show(listed.map {
+            CompletionItem(prefix: "/", name: $0.name, hint: $0.argumentHint, badge: $0.origin == .library ? "Tiller" : nil, detail: $0.description)
+        }, highlighting: query)
+    }
+
+    /// Skills whose name starts with `query` come first, then those that
+    /// have it elsewhere in the name.
+    static func matches(_ skills: [AgentSkill], _ query: String) -> [AgentSkill] {
+        let query = query.lowercased()
+        let starts = skills.filter { $0.name.lowercased().hasPrefix(query) }
+        guard !query.isEmpty else { return starts }
+        return starts + skills.filter { !$0.name.lowercased().hasPrefix(query) && $0.name.lowercased().contains(query) }
     }
 
     func hide() {
@@ -273,20 +367,7 @@ final class SkillCompletion {
     /// The text view's `doCommandBy` while the picker is open. Returns
     /// whether the picker took the command.
     func handle(_ selector: Selector) -> Bool {
-        guard isShown else { return false }
-        switch selector {
-        case #selector(NSResponder.moveUp(_:)):
-            picker.moveSelection(by: -1)
-        case #selector(NSResponder.moveDown(_:)):
-            picker.moveSelection(by: 1)
-        case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertNewline(_:)):
-            if let skill = picker.selectedSkill { complete(skill) }
-        case #selector(NSResponder.cancelOperation(_:)):
-            hide()
-        default:
-            return false
-        }
-        return true
+        picker.handle(selector) { hide() }
     }
 
     /// Puts `/name ` in the field, keeping it undoable.

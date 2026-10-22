@@ -5,6 +5,8 @@ import Quartz
 protocol AgentPanelDelegate: AnyObject {
     /// The selected tab, described for the agent at the start of each message.
     func agentPanelContext(_ panel: AgentPanelView) -> String
+    /// The window's open tabs, in order, which `@` in a message offers.
+    func agentPanelTabs(_ panel: AgentPanelView) -> [AgentTabMention]
 }
 
 /// The side panel: pick an agent and chat with it, in up to a few tabs, each
@@ -156,6 +158,10 @@ final class AgentPanelView: NSView {
         chat.context = { [weak self] in
             guard let self else { return "" }
             return self.delegate?.agentPanelContext(self) ?? ""
+        }
+        chat.openTabs = { [weak self] in
+            guard let self else { return [] }
+            return self.delegate?.agentPanelTabs(self) ?? []
         }
         chat.onChange = { [weak self, weak chat] in
             guard let self, let chat else { return }
@@ -658,7 +664,7 @@ final class AgentEmptyState: NSView {
 
     private let badge = SymbolBadge(symbol: "sparkles")
     private let title = NSTextField(labelWithString: "")
-    private let subtitle = NSTextField(wrappingLabelWithString: "It can read the page, click, type and open tabs for you. Type / for skills.")
+    private let subtitle = NSTextField(wrappingLabelWithString: "It can read the page, click, type and open tabs for you. Type / for skills, @ for tabs.")
     private static let subtitleWidth: CGFloat = 240
 
     private static let suggestions: [(symbol: String, text: String)] = [
@@ -850,9 +856,12 @@ private final class SuggestionButton: NSView {
 /// The message field: a rounded card with the text across its full width on
 /// top, easing taller with what is typed up to a few lines, and a row of
 /// controls along its bottom: the add button, the chat's model, effort and
-/// tools, then dictation and the send/stop button. Attached images show
+/// tools, then how full the context window is, dictation and the send/stop
+/// button. Attached images show
 /// above the text. Images pasted or dropped on it go to `onImages`, and a
-/// hint says so while they are dragged over it.
+/// hint says so while they are dragged over it. A `/name` at the start that
+/// calls a skill reads as a token, and text taller than the field fades out
+/// at the edge it scrolls past.
 final class Composer: NSView {
     let textView = PlaceholderTextView()
     let sendButton = SendButton()
@@ -867,10 +876,19 @@ final class Composer: NSView {
     let toolsButton = Theme.iconButton("wrench.and.screwdriver", label: "Tools", size: Theme.Symbol.row)
     /// Starts macOS dictation into the field, beside the send button.
     let dictateButton = Theme.iconButton("mic", label: "Dictate", size: Theme.Symbol.bar)
+    /// How much of the model's context window the chat takes, before the
+    /// dictation button once the agent says.
+    let contextMeter = ContextMeter()
     var onImages: (([NSImage]) -> Void)?
     var onOpenImage: ((Int) -> Void)?
+    /// Whether a skill of that name can be called, which makes `/name` at
+    /// the start of the text a token.
+    var isSkill: ((String) -> Bool)?
     private let undo = UndoManager()
-    private let scrollView = NSScrollView()
+    private let scrollView = FadingScrollView()
+    /// The name after the last `/` looked up, and whether it was a skill,
+    /// so typing past it doesn't look it up again.
+    private var lookedUp: (name: Substring, isSkill: Bool)?
     private let thumbnails = ThumbnailGrid(side: 48, alignment: .leading)
     private let controls = NSStackView()
     private let dropHint = NSStackView()
@@ -889,7 +907,7 @@ final class Composer: NSView {
             // The hint takes the card's middle while what is in it steps back.
             dropHint.setShown(isDropTarget, fadesOut: true, duration: Theme.Duration.standard)
             if isDropTarget { dropHint.dropIn(distance: 4, duration: Theme.Duration.slide) }
-            for view in [scrollView, thumbnails, controls, dictateButton, sendButton] as [NSView] {
+            for view in [scrollView, thumbnails, controls, contextMeter, dictateButton, sendButton] as [NSView] {
                 view.fadeAlpha(to: isDropTarget ? 0.15 : 1, duration: Theme.Duration.standard)
             }
         }
@@ -915,6 +933,9 @@ final class Composer: NSView {
     /// so the two curves run alongside.
     private static let textInset: CGFloat = 14
     private static let controlInset: CGFloat = 8
+    /// Room inside the text view on each side for the plate behind a token,
+    /// taken back from the card's margin so the text stays where it was.
+    private static let tokenRoom: CGFloat = 3
     static let radius = SendButton.side / 2 + controlInset
 
     var text: String {
@@ -1000,7 +1021,7 @@ final class Composer: NSView {
         textView.drawsBackground = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
-        textView.textContainerInset = NSSize(width: 0, height: 0)
+        textView.textContainerInset = NSSize(width: Self.tokenRoom, height: 0)
         textView.textContainer?.lineFragmentPadding = 0
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
@@ -1027,6 +1048,10 @@ final class Composer: NSView {
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(textScrolled(_:)), name: NSView.boundsDidChangeNotification, object: scrollView.contentView
+        )
 
         updateSendButton()
 
@@ -1054,7 +1079,7 @@ final class Composer: NSView {
         dictateButton.target = self
         dictateButton.action = #selector(dictate(_:))
 
-        for view in [thumbnails, scrollView, controls, dictateButton, sendButton, dropHint] {
+        for view in [thumbnails, scrollView, controls, contextMeter, dictateButton, sendButton, dropHint] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -1066,8 +1091,8 @@ final class Composer: NSView {
             thumbnails.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.textInset),
             thumbnails.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.textInset),
             textBelowTop,
-            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.textInset),
-            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.textInset),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.textInset - Self.tokenRoom),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(Self.textInset - Self.tokenRoom)),
             textHeight,
 
             sendButton.topAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: 8),
@@ -1077,7 +1102,9 @@ final class Composer: NSView {
             controls.centerYAnchor.constraint(equalTo: sendButton.centerYAnchor),
             dictateButton.trailingAnchor.constraint(equalTo: sendButton.leadingAnchor, constant: -4),
             dictateButton.centerYAnchor.constraint(equalTo: sendButton.centerYAnchor),
-            controls.trailingAnchor.constraint(lessThanOrEqualTo: dictateButton.leadingAnchor, constant: -8),
+            contextMeter.trailingAnchor.constraint(equalTo: dictateButton.leadingAnchor, constant: -2),
+            contextMeter.centerYAnchor.constraint(equalTo: sendButton.centerYAnchor),
+            controls.trailingAnchor.constraint(lessThanOrEqualTo: contextMeter.leadingAnchor, constant: -8),
 
             dropHint.centerXAnchor.constraint(equalTo: centerXAnchor),
             dropHint.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -1128,6 +1155,8 @@ final class Composer: NSView {
             hadNoText = string.isEmpty
             textView.needsDisplay = true
         }
+        updateToken()
+        defer { updateEdgeFade() }
         guard let layoutManager = textView.layoutManager, let container = textView.textContainer else { return }
         // Only as far down as the field can grow: past that it scrolls, and
         // the rest is laid out as it shows.
@@ -1149,6 +1178,41 @@ final class Composer: NSView {
             context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
             textHeight.animator().constant = height
         }
+    }
+
+    /// Makes `/name` at the start a token while it names a skill: in the
+    /// accent, on a soft plate of it, which fades in and out with it.
+    private func updateToken() {
+        let string = textView.string
+        var length = 0
+        if string.hasPrefix("/") {
+            let name = string.dropFirst().prefix { !$0.isWhitespace }
+            if lookedUp?.name != name {
+                lookedUp = (name, !name.isEmpty && isSkill?(String(name)) == true)
+            }
+            if lookedUp?.isSkill == true { length = name.utf16.count + 1 }
+        }
+        textView.tokenLength = length
+    }
+
+    /// The skills on offer changed, so a `/name` is looked up again.
+    func skillsChanged() {
+        lookedUp = nil
+        updateToken()
+    }
+
+    @objc private func textScrolled(_ notification: Notification) {
+        updateEdgeFade()
+    }
+
+    private func updateEdgeFade() {
+        let visible = scrollView.contentView.bounds
+        scrollView.fadeEdges(above: visible.minY > 1, below: textView.frame.height - visible.maxY > 1)
+    }
+
+    /// Shows that the chat takes `used` tokens of the model's `window`.
+    func showContextUsage(used: Int, window: Int) {
+        contextMeter.show(used: used, window: window)
     }
 
     /// Marks a message going out: the send arrow lifts away.
@@ -1215,6 +1279,7 @@ final class Composer: NSView {
     override func layout() {
         super.layout()
         layer?.shadowPath = shadowPath
+        updateEdgeFade()
     }
 
     override func updateTrackingAreas() {
@@ -1256,6 +1321,43 @@ final class Composer: NSView {
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         isDropTarget = false
         return takeImages(from: sender.draggingPasteboard)
+    }
+}
+
+/// The composer's text, faded out at the top while lines are scrolled up
+/// past it and at the bottom while more are below. Masked only while it
+/// overflows, so a field that fits draws as it is.
+private final class FadingScrollView: NSScrollView {
+    private let edgeFade = EdgeFadeMask()
+
+    func fadeEdges(above: Bool, below: Bool) {
+        guard above || below else {
+            layer?.mask = nil
+            return
+        }
+        wantsLayer = true
+        let opaque = CGColor.black
+        // The gradient's first stop draws at the top edge here.
+        let colors = [above ? .clear : opaque, opaque, opaque, below ? .clear : opaque]
+        let added = layer?.mask == nil
+        if added {
+            edgeFade.fit(bounds)
+            layer?.mask = edgeFade
+        }
+        guard edgeFade.colors as? [CGColor] != colors else { return }
+        CATransaction.begin()
+        // A fade turning on with the overflow lands at once; one edge
+        // giving way to the other as the text scrolls eases.
+        CATransaction.setDisableActions(added || Theme.reduceMotion)
+        CATransaction.setAnimationDuration(Theme.Duration.quick)
+        edgeFade.colors = colors
+        CATransaction.commit()
+    }
+
+    /// Follows the field's height frame by frame as it eases.
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        if layer?.mask != nil { edgeFade.fit(bounds) }
     }
 }
 
@@ -1576,6 +1678,95 @@ final class ComposerChip: HoverButton {
     }
 }
 
+/// A small ring that fills as the chat takes up its model's context window,
+/// as Codex's does: in the secondary text color, orange from 80% and red
+/// from 95%, with the numbers in its tooltip. Hidden until the agent reports
+/// them; it fades in, and the ring eases to each new amount.
+final class ContextMeter: NSView {
+    private let track = CAShapeLayer()
+    private let fill = CAShapeLayer()
+    private(set) var fraction: CGFloat = 0
+    private static let diameter: CGFloat = 14
+    private static let lineWidth: CGFloat = 2
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        for ring in [track, fill] {
+            ring.fillColor = nil
+            ring.lineWidth = Self.lineWidth
+            ring.lineCap = .round
+            layer?.addSublayer(ring)
+        }
+        fill.strokeEnd = 0
+        isHidden = true
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: Theme.ButtonSize.bar),
+            heightAnchor.constraint(equalToConstant: Theme.ButtonSize.bar),
+        ])
+        setAccessibilityElement(true)
+        setAccessibilityRole(.levelIndicator)
+        setAccessibilityLabel("Context window")
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func show(used: Int, window: Int) {
+        let fraction = min(1, max(0, CGFloat(used) / CGFloat(window)))
+        let percent = Int((fraction * 100).rounded())
+        toolTip = "Context window: \(percent)% used\n\(Self.tokens(used)) of \(Self.tokens(window)) tokens"
+        setAccessibilityValue("\(percent)% used")
+        let from = isHidden ? 0 : self.fraction
+        self.fraction = fraction
+        setShown(true, duration: Theme.Duration.standard)
+        needsDisplay = true
+        guard window > 0, self.window != nil, !Theme.reduceMotion, from != fraction else { return }
+        let ease = CABasicAnimation(keyPath: "strokeEnd")
+        ease.fromValue = from
+        ease.toValue = fraction
+        ease.duration = 0.5
+        ease.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
+        fill.add(ease, forKey: "fill")
+    }
+
+    /// 950, 12.3K, 258K, 1M.
+    static func tokens(_ count: Int) -> String {
+        func short(_ value: Double, _ unit: String) -> String {
+            let text = value < 10 ? String(format: "%.1f", value) : String(Int(value.rounded()))
+            return (text.hasSuffix(".0") ? String(text.dropLast(2)) : text) + unit
+        }
+        if count >= 1_000_000 { return short(Double(count) / 1_000_000, "M") }
+        if count >= 1000 { return short(Double(count) / 1000, "K") }
+        return String(count)
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let radius = (Self.diameter - Self.lineWidth) / 2
+        // From the top, clockwise whichever way up the layer is drawn.
+        let path = CGMutablePath()
+        if fill.contentsAreFlipped() {
+            path.addArc(center: center, radius: radius, startAngle: -.pi / 2, endAngle: 1.5 * .pi, clockwise: false)
+        } else {
+            path.addArc(center: center, radius: radius, startAngle: .pi / 2, endAngle: -1.5 * .pi, clockwise: true)
+        }
+        let ink: NSColor = fraction >= 0.95 ? .systemRed : fraction >= 0.8 ? .systemOrange : Theme.secondaryText
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for ring in [track, fill] {
+            ring.frame = bounds
+            ring.path = path
+        }
+        track.strokeColor = Theme.text.dynamic(alpha: 0.14).layerColor
+        fill.strokeColor = ink.layerColor
+        fill.strokeEnd = fraction
+        CATransaction.commit()
+    }
+}
+
 // MARK: Queued messages
 
 /// The messages written while a turn runs, above the tab bar: one row each,
@@ -1781,6 +1972,24 @@ final class PlaceholderTextView: NSTextView {
     var shortPlaceholder = "" {
         didSet { needsDisplay = true }
     }
+    /// How many characters at the start make a token, drawn in the accent on
+    /// a rounded plate of it. 0 for none.
+    var tokenLength = 0 {
+        didSet {
+            // Set again on every change, as an edit can carry the color
+            // past the token or take it off part of it.
+            guard tokenLength != 0 || oldValue != 0, let layoutManager else { return }
+            let all = NSRange(location: 0, length: (string as NSString).length)
+            layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: all)
+            if tokenLength > 0 {
+                let token = NSRange(location: 0, length: min(tokenLength, all.length))
+                layoutManager.addTemporaryAttribute(.foregroundColor, value: Theme.accentColor, forCharacterRange: token)
+            }
+            // A token coming or going fades in or out, rather than snapping.
+            if (tokenLength == 0) != (oldValue == 0) { crossfade(duration: Theme.Duration.quick) }
+            if tokenLength != oldValue { needsDisplay = true }
+        }
+    }
     var onFocusChange: (() -> Void)?
     /// Sees each key first, and returns true for one it handled.
     var onKeyDown: ((NSEvent) -> Bool)?
@@ -1829,6 +2038,21 @@ final class PlaceholderTextView: NSTextView {
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         dropsImages(sender) ? imageDropTarget!.performDragOperation(sender) : super.performDragOperation(sender)
+    }
+
+    /// The token's plate goes under the text, padded a little past it on
+    /// each side, into the room the text container's inset leaves.
+    override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+        guard tokenLength > 0, let layoutManager, let textContainer else { return }
+        let characters = NSRange(location: 0, length: min(tokenLength, (string as NSString).length))
+        let glyphs = layoutManager.glyphRange(forCharacterRange: characters, actualCharacterRange: nil)
+        var plate = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+        plate.origin.x += textContainerOrigin.x
+        plate.origin.y += textContainerOrigin.y
+        plate = plate.insetBy(dx: -3, dy: 0)
+        Theme.accent(Theme.Accent.soft).setFill()
+        NSBezierPath(roundedRect: plate, xRadius: 4, yRadius: 4).fill()
     }
 
     override func draw(_ dirtyRect: NSRect) {
