@@ -7,6 +7,16 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+- The agent panel's message field is restyled after Codex's: a rounder
+  card with more room around the text, whose edge firms up under the
+  mouse and with focus instead of glowing in the accent, and a send
+  button in the text's color. The thinking effort has a button of its own
+  next to the model, which opens just the efforts, and the hint mentions
+  `/` for skills. The field eases taller and shorter as lines come and go,
+  the send arrow lifts away as a message goes and turns into the stop
+  square while the agent works, and images dragged over the field show a
+  Drop images to attach hint. Reduce Motion turns the motion off.
+
 ## 0.4.2
 
 - Closing the last tab keeps the window and profile open on the configured

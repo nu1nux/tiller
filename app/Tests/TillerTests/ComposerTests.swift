@@ -113,5 +113,26 @@ struct ComposerTests {
         composer.sendButton.performClick(nil)
         #expect(receiver.clicks == 1)
     }
-}
 
+    @Test func effortHasItsOwnButton() {
+        let (window, composer) = makeComposer()
+        defer { window.close() }
+        composer.showOptions(model: "GPT-5", summary: "GPT-5 · high", isDefault: false, effort: "high", hasEfforts: true, tools: [])
+        #expect(composer.modelButton.title == "GPT-5")
+        #expect(!composer.effortButton.isHidden)
+        #expect(composer.effortButton.title == "High")
+
+        composer.showOptions(model: "GPT-5", summary: "GPT-5", isDefault: false, effort: nil, hasEfforts: true, tools: [])
+        #expect(composer.effortButton.title == "Effort")
+
+        // An agent without efforts has no effort button.
+        composer.showOptions(model: "Default model", summary: "default model", isDefault: true, effort: nil, hasEfforts: false, tools: [])
+        #expect(composer.effortButton.isHidden)
+    }
+
+    @Test func effortTitles() {
+        #expect(AgentModelOptions.effortTitle("low") == "Low")
+        #expect(AgentModelOptions.effortTitle("xhigh") == "Extra high")
+        #expect(AgentModelOptions.effortTitle("max") == "Max")
+    }
+}

@@ -168,6 +168,7 @@ final class AgentPanelView: NSView {
         }
         chat.onTools = { [weak self] button in self?.showTools(from: button) }
         chat.onModel = { [weak self] button in self?.showModelOptions(from: button) }
+        chat.onEffort = { [weak self] button in self?.showModelOptions(from: button, effortOnly: true) }
         chat.isHidden = true
         chat.translatesAutoresizingMaskIntoConstraints = false
         chatArea.addSubview(chat)
@@ -269,11 +270,11 @@ final class AgentPanelView: NSView {
 
     /// The selected chat's model, effort, context and fast mode. Locked while
     /// a turn runs, since a change restarts the agent.
-    private func showModelOptions(from button: NSView) {
+    private func showModelOptions(from button: NSView, effortOnly: Bool = false) {
         let chat = active
         AgentModelMenu.popUp(
             from: button, above: true, kind: chat.choice, profile: profile, options: chat.modelOptions, locked: chat.isBusy,
-            note: chat.isBusy ? "Stop the agent to change the model." : "Settings sets them for new chats."
+            note: chat.isBusy ? "Stop the agent to change the model." : "Settings sets them for new chats.", effortOnly: effortOnly
         ) { [weak chat] options in
             chat?.setModelOptions(options)
         }
@@ -455,6 +456,7 @@ final class AgentPanelView: NSView {
         case "history": tabBar.historyForTesting()
         case "tools": active.toolsForTesting()
         case "model": active.modelForTesting()
+        case "effort": active.effortForTesting()
         case "focus": window?.makeFirstResponder(input)
         case "enter": active.submitForTesting(direct: false)
         case "ctrlEnter": active.submitForTesting(direct: true)
@@ -846,10 +848,11 @@ private final class SuggestionButton: NSView {
 // MARK: Composer
 
 /// The message field: a rounded card with the text across its full width on
-/// top, growing with what is typed up to a few lines, and a row of controls
-/// along its bottom: the add button, the chat's model and tools, and the
-/// send/stop button. Attached images show above the text. Images pasted or
-/// dropped on it go to `onImages`.
+/// top, easing taller with what is typed up to a few lines, and a row of
+/// controls along its bottom: the add button, the chat's model, effort and
+/// tools, and the send/stop button. Attached images show above the text.
+/// Images pasted or dropped on it go to `onImages`, and a hint says so while
+/// they are dragged over it.
 final class Composer: NSView {
     let textView = PlaceholderTextView()
     let sendButton = SendButton()
@@ -857,6 +860,9 @@ final class Composer: NSView {
     let addButton = Theme.iconButton("plus", label: "Add")
     /// Names the chat's model and opens its options.
     let modelButton = ComposerChip()
+    /// Names the chat's thinking effort and opens just those. Hidden for an
+    /// agent without efforts.
+    let effortButton = ComposerChip()
     /// Tinted while any built-in tool is on, and opens their menu.
     let toolsButton = Theme.iconButton("wrench.and.screwdriver", label: "Tools", size: Theme.Symbol.row)
     var onImages: (([NSImage]) -> Void)?
@@ -864,6 +870,8 @@ final class Composer: NSView {
     private let undo = UndoManager()
     private let scrollView = NSScrollView()
     private let thumbnails = ThumbnailGrid(side: 48, alignment: .leading)
+    private let controls = NSStackView()
+    private let dropHint = NSStackView()
     private var textHeight: NSLayoutConstraint!
     private var textBelowTop: NSLayoutConstraint!
     private var textBelowThumbnails: NSLayoutConstraint!
@@ -873,7 +881,19 @@ final class Composer: NSView {
     /// Whether the placeholder was showing as of the last change.
     private var hadNoText = true
     private var isDropTarget = false {
-        didSet { if isDropTarget != oldValue { needsDisplay = true } }
+        didSet {
+            guard isDropTarget != oldValue else { return }
+            needsDisplay = true
+            // The hint takes the card's middle while what is in it steps back.
+            dropHint.setShown(isDropTarget, fadesOut: true, duration: Theme.Duration.standard)
+            if isDropTarget { dropHint.dropIn(distance: 4, duration: Theme.Duration.slide) }
+            for view in [scrollView, thumbnails, controls, sendButton] as [NSView] {
+                view.fadeAlpha(to: isDropTarget ? 0.15 : 1, duration: Theme.Duration.standard)
+            }
+        }
+    }
+    private var isHovered = false {
+        didSet { if isHovered != oldValue { needsDisplay = true } }
     }
 
     var attachments: [AgentAttachment] = [] {
@@ -889,9 +909,11 @@ final class Composer: NSView {
     private static let font = NSFont.systemFont(ofSize: Theme.FontSize.body)
     private static let maxLines: CGFloat = 10
     /// The card's inner margins: the text's from the edges, the controls'
-    /// from the corners.
-    private static let textInset: CGFloat = 12
-    private static let controlInset: CGFloat = 6
+    /// from the corners, whose radius is the send button's plus that margin
+    /// so the two curves run alongside.
+    private static let textInset: CGFloat = 14
+    private static let controlInset: CGFloat = 8
+    static let radius = SendButton.side / 2 + controlInset
 
     var text: String {
         get { textView.string }
@@ -936,13 +958,21 @@ final class Composer: NSView {
     /// Whether nothing is written or attached.
     var isEmpty: Bool { isBlank && attachments.isEmpty }
 
-    /// Shows the chat's model, `summary` in full in the tooltip, and its
-    /// tools. A model or tools other than the CLI's own read stronger.
-    func showOptions(model title: String, summary: String, isDefault: Bool, tools: [AgentTool]) {
+    /// Shows the chat's model, `summary` in full in the tooltip, its effort
+    /// when the agent has efforts (`hasEfforts`), and its tools. Choices
+    /// other than the CLI's own read stronger.
+    func showOptions(
+        model title: String, summary: String, isDefault: Bool, effort: String?, hasEfforts: Bool, tools: [AgentTool]
+    ) {
         modelButton.title = title
         modelButton.isEmphasized = !isDefault
         modelButton.toolTip = "Model: " + summary
         modelButton.setAccessibilityValue(summary)
+        effortButton.isHidden = !hasEfforts
+        effortButton.title = effort.map(AgentModelOptions.effortTitle) ?? "Effort"
+        effortButton.isEmphasized = effort != nil
+        effortButton.toolTip = "Thinking effort: " + (effort.map(AgentModelOptions.effortTitle) ?? "the CLI's default")
+        effortButton.setAccessibilityValue(effort ?? "default")
         toolsButton.contentTintColor = tools.isEmpty ? Theme.secondaryText : Theme.accentColor
         toolsButton.toolTip = tools.isEmpty
             ? "Tools: browser only"
@@ -989,18 +1019,31 @@ final class Composer: NSView {
 
         updateSendButton()
 
-        // The model's name truncates before the row clips any button.
+        effortButton.setAccessibilityLabel("Thinking effort")
+        effortButton.isHidden = true
+        // The model's name truncates before the row clips any button, and
+        // the effort after it.
         modelButton.setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
-        let leading = NSStackView(views: [addButton, modelButton, toolsButton])
-        leading.spacing = 2
-        leading.setClippingResistancePriority(.defaultLow, for: .horizontal)
+        effortButton.setContentCompressionResistancePriority(.defaultLow - 2, for: .horizontal)
+        controls.setViews([addButton, modelButton, effortButton, toolsButton], in: .leading)
+        controls.spacing = 2
+        controls.setClippingResistancePriority(.defaultLow, for: .horizontal)
 
-        for view in [thumbnails, scrollView, leading, sendButton] {
+        let dropIcon = NSImageView(image: Theme.symbol("photo.badge.plus", size: 13, weight: .medium) ?? NSImage())
+        dropIcon.contentTintColor = Theme.accentColor
+        let dropLabel = NSTextField(labelWithString: "Drop images to attach")
+        dropLabel.font = .systemFont(ofSize: Theme.FontSize.secondary, weight: .medium)
+        dropLabel.textColor = Theme.accentColor
+        dropHint.setViews([dropIcon, dropLabel], in: .center)
+        dropHint.spacing = 6
+        dropHint.isHidden = true
+
+        for view in [thumbnails, scrollView, controls, sendButton, dropHint] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
         textHeight = scrollView.heightAnchor.constraint(equalToConstant: Self.lineHeight)
-        textBelowTop = scrollView.topAnchor.constraint(equalTo: topAnchor, constant: 11)
+        textBelowTop = scrollView.topAnchor.constraint(equalTo: topAnchor, constant: 13)
         textBelowThumbnails = scrollView.topAnchor.constraint(equalTo: thumbnails.bottomAnchor, constant: 10)
         NSLayoutConstraint.activate([
             thumbnails.topAnchor.constraint(equalTo: topAnchor, constant: Self.textInset),
@@ -1011,12 +1054,15 @@ final class Composer: NSView {
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.textInset),
             textHeight,
 
-            sendButton.topAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: 6),
+            sendButton.topAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: 8),
             sendButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.controlInset),
             sendButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.controlInset),
-            leading.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.controlInset),
-            leading.centerYAnchor.constraint(equalTo: sendButton.centerYAnchor),
-            leading.trailingAnchor.constraint(lessThanOrEqualTo: sendButton.leadingAnchor, constant: -8),
+            controls.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.controlInset),
+            controls.centerYAnchor.constraint(equalTo: sendButton.centerYAnchor),
+            controls.trailingAnchor.constraint(lessThanOrEqualTo: sendButton.leadingAnchor, constant: -8),
+
+            dropHint.centerXAnchor.constraint(equalTo: centerXAnchor),
+            dropHint.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
 
@@ -1071,7 +1117,25 @@ final class Composer: NSView {
         layoutManager.ensureLayout(forBoundingRect: NSRect(x: 0, y: 0, width: container.size.width, height: tallest + 1), in: container)
         let used = layoutManager.usedRect(for: container).height
         let height = min(max(Self.lineHeight, used), tallest).rounded(.up)
-        if textHeight.constant != height { textHeight.constant = height }
+        guard textHeight.constant != height else { return }
+        // A line more or less eases the card to its new height; text set all
+        // at once, such as a sent message clearing it, or a field out of
+        // sight, lands there at once.
+        let lines = abs(height - textHeight.constant) / Self.lineHeight
+        guard window?.isVisible == true, !Theme.reduceMotion, lines < 3 else {
+            textHeight.constant = height
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Theme.Duration.standard
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
+            textHeight.animator().constant = height
+        }
+    }
+
+    /// Marks a message going out: the send arrow lifts away.
+    func didSend() {
+        sendButton.launch()
     }
 
     private func updateSendButton() {
@@ -1091,36 +1155,50 @@ final class Composer: NSView {
         guard let layer else { return }
         let focused = window?.firstResponder === textView
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        // The same corners as the skill picker that opens above it.
-        layer.cornerRadius = Theme.Radius.plate
+        layer.cornerRadius = Self.radius
         layer.cornerCurve = .continuous
         // See-through over the panel's material, unless Reduce Transparency is on.
         let background: NSColor = isDropTarget ? Theme.accent(0.08)
             : Theme.surface.dynamic(alpha: Theme.reduceTransparency ? 1 : dark ? 0.75 : 0.92)
+        // Neutral, as the text is what holds the eye: the edge firms up under
+        // the mouse and more with focus. Only a drop takes the accent.
         let border: NSColor = isDropTarget ? Theme.accentColor
-            : focused ? Theme.accent(Theme.Accent.outline) : Theme.hairline
-        // A soft lift off the panel, which focus tints with the accent.
-        let shadow: NSColor = focused || isDropTarget ? Theme.accentColor : .black
-        let shadowOpacity: Float = focused || isDropTarget ? (dark ? 0.35 : 0.22) : (dark ? 0.25 : 0.07)
-        withEasing(Theme.Duration.quick) {
+            : focused ? Theme.text.dynamic(alpha: dark ? 0.3 : 0.24)
+            : isHovered ? Theme.text.dynamic(alpha: dark ? 0.16 : 0.13)
+            : Theme.hairline
+        // A soft lift off the panel, a little higher while focused.
+        let lifted = focused || isDropTarget
+        withEasing(Theme.Duration.standard) {
             layer.backgroundColor = background.layerColor
-            layer.borderWidth = isDropTarget ? 2 : Theme.hairlineWidth
+            layer.borderWidth = isDropTarget ? 1.5 : Theme.hairlineWidth
             layer.borderColor = border.layerColor
-            layer.shadowColor = shadow.layerColor
-            layer.shadowOpacity = shadowOpacity
-            layer.shadowRadius = focused || isDropTarget ? 5 : 8
-            layer.shadowOffset = focused || isDropTarget ? .zero : CGSize(width: 0, height: -2)
+            layer.shadowColor = (isDropTarget ? Theme.accentColor : .black).layerColor
+            layer.shadowOpacity = lifted ? (dark ? 0.4 : 0.1) : (dark ? 0.25 : 0.05)
+            layer.shadowRadius = lifted ? 14 : 8
+            layer.shadowOffset = CGSize(width: 0, height: lifted ? -4 : -2)
         }
         // A path keeps the shadow off the offscreen pass AppKit would
         // otherwise render the card's contents in to find its outline.
-        layer.shadowPath = CGPath(roundedRect: bounds, cornerWidth: Theme.Radius.plate, cornerHeight: Theme.Radius.plate, transform: nil)
+        layer.shadowPath = shadowPath
         layer.masksToBounds = false
+    }
+
+    private var shadowPath: CGPath {
+        CGPath(roundedRect: bounds, cornerWidth: Self.radius, cornerHeight: Self.radius, transform: nil)
     }
 
     override func layout() {
         super.layout()
-        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: Theme.Radius.plate, cornerHeight: Theme.Radius.plate, transform: nil)
+        layer?.shadowPath = shadowPath
     }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        addHoverArea([.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect])
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
 
     /// Clicks anywhere in the card that isn't a control go to the text.
     override func mouseDown(with event: NSEvent) {
@@ -1156,10 +1234,11 @@ final class Composer: NSView {
     }
 }
 
-/// The composer's send button: an arrow on a disc of the accent color, which
-/// greys out with nothing to send, and a square on a disc of the text color
-/// while a turn can be stopped. The disc eases between states and dips under
-/// a press.
+/// The composer's send button: an arrow on a disc of the text color, which
+/// greys out with nothing to send, and a square on the same disc while a turn
+/// can be stopped. The disc eases between states, dips under a press and pops
+/// a little as it comes on; the glyph turns into the other one, and the
+/// arrow lifts away as a message goes.
 final class SendButton: NSButton {
     enum Mode { case send, stop }
 
@@ -1168,6 +1247,13 @@ final class SendButton: NSButton {
     private(set) var mode = Mode.send
     private let disc = CALayer()
     private let glyph = CALayer()
+    /// What the glyph last showed, so a change of mode or of being enabled
+    /// is animated once, not on every hover redraw.
+    private var shownMode: Mode?
+    private var shownEnabled: Bool?
+    /// When the arrow last lifted away, which stands in for the morph to
+    /// the stop square that a sent message brings.
+    private var launched: CFTimeInterval = 0
     private var isHovered = false {
         didSet { if isHovered != oldValue { needsDisplay = true } }
     }
@@ -1182,6 +1268,8 @@ final class SendButton: NSButton {
         layer?.addSublayer(disc)
         disc.addSublayer(glyph)
         disc.cornerCurve = .circular
+        // The arrow leaving goes out of sight at the disc's edge.
+        disc.masksToBounds = true
         glyph.contentsGravity = .center
         translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -1222,15 +1310,12 @@ final class SendButton: NSButton {
         let fill: NSColor
         let ink: NSColor
         switch (mode, isEnabled) {
-        case (.stop, _):
+        case (.stop, _), (.send, true):
             fill = Theme.text
             ink = Theme.chrome
-        case (.send, true):
-            fill = Theme.accentFill
-            ink = Theme.accentFillText
         case (.send, false):
             fill = Theme.fill(Theme.Fill.pressed)
-            ink = Theme.text.dynamic(alpha: 0.45)
+            ink = Theme.text.dynamic(alpha: 0.4)
         }
         // Hover and press redraw often, the glyph only per state and appearance.
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -1250,8 +1335,80 @@ final class SendButton: NSButton {
             disc.opacity = isHovered && isEnabled && !isHighlighted ? 0.88 : 1
             disc.setAffineTransform(CGAffineTransform(scaleX: scale, y: scale))
         }
+        let modeChanged = shownMode != nil && shownMode != mode
+        let cameOn = shownEnabled == false && isEnabled
+        shownMode = mode
+        shownEnabled = isEnabled
         glyph.contents = image
         glyph.contentsScale = window?.backingScaleFactor ?? 2
+        guard window != nil, !Theme.reduceMotion else { return }
+        if modeChanged, CACurrentMediaTime() - launched < 0.5 {
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = Theme.Duration.quick
+            glyph.add(fade, forKey: "contents")
+        } else if modeChanged {
+            // The arrow and the square turn into each other.
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = Theme.Duration.slide
+            glyph.add(fade, forKey: "contents")
+            glyph.add(Self.spring(keyPath: "transform.scale", from: 0.4, overshoot: 1.12), forKey: "morph")
+            let turn = CABasicAnimation(keyPath: "transform.rotation.z")
+            turn.fromValue = mode == .stop ? -CGFloat.pi / 2 : CGFloat.pi / 2
+            turn.toValue = 0
+            turn.duration = Theme.Duration.slide
+            turn.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
+            glyph.add(turn, forKey: "turn")
+        } else if cameOn {
+            disc.add(Self.spring(keyPath: "transform.scale", from: 0.86, overshoot: 1.06), forKey: "on")
+        }
+    }
+
+    /// Scales from `from` past `overshoot` to full size.
+    private static func spring(keyPath: String, from: CGFloat, overshoot: CGFloat) -> CAAnimation {
+        let animation = CAKeyframeAnimation(keyPath: keyPath)
+        animation.values = [from, overshoot, 1]
+        animation.keyTimes = [0, 0.6, 1]
+        animation.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .easeInEaseOut)]
+        animation.duration = Theme.Duration.panel
+        return animation
+    }
+
+    /// A copy of the arrow lifts out of the top of the disc, and the glyph,
+    /// by then often the stop square, rises in from below as a message
+    /// goes. Nothing under Reduce Motion.
+    func launch() {
+        guard window != nil, !Theme.reduceMotion, mode == .send else { return }
+        launched = CACurrentMediaTime()
+        // Up is +y unless the layer is drawn flipped.
+        let up: CGFloat = disc.contentsAreFlipped() ? -1 : 1
+        let travel = Self.side * 0.8 * up
+        let ghost = CALayer()
+        ghost.frame = glyph.frame
+        ghost.contents = glyph.contents
+        ghost.contentsGravity = .center
+        ghost.contentsScale = glyph.contentsScale
+        disc.addSublayer(ghost)
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { ghost.removeFromSuperlayer() }
+        let out = CABasicAnimation(keyPath: "transform.translation.y")
+        out.fromValue = 0
+        out.toValue = travel
+        out.duration = 0.18
+        out.timingFunction = CAMediaTimingFunction(controlPoints: 0.5, 0, 0.9, 0.5)
+        out.fillMode = .forwards
+        out.isRemovedOnCompletion = false
+        ghost.add(out, forKey: "out")
+        let rise = CABasicAnimation(keyPath: "transform.translation.y")
+        rise.fromValue = -travel
+        rise.toValue = 0
+        rise.beginTime = CACurrentMediaTime() + 0.12
+        rise.duration = Theme.Duration.panel
+        rise.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
+        rise.fillMode = .backwards
+        glyph.add(rise, forKey: "launch")
+        CATransaction.commit()
     }
 
     private static var glyphs: [String: NSImage] = [:]

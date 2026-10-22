@@ -10,8 +10,10 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     var context: (() -> String)?
     /// Called when the title, status or agent changes, or a turn starts or ends.
     var onChange: (() -> Void)?
-    /// Get the message field's model or tools button, to show the menu from.
+    /// Get the message field's model, effort or tools button, to show the
+    /// menu from.
     var onModel: ((NSView) -> Void)?
+    var onEffort: ((NSView) -> Void)?
     var onTools: ((NSView) -> Void)?
 
     let id: String
@@ -320,6 +322,8 @@ final class AgentChatView: NSView, NSTextViewDelegate {
         composer.addButton.action = #selector(showAddMenu(_:))
         composer.modelButton.target = self
         composer.modelButton.action = #selector(showModel(_:))
+        composer.effortButton.target = self
+        composer.effortButton.action = #selector(showEffort(_:))
         composer.toolsButton.target = self
         composer.toolsButton.action = #selector(showTools(_:))
         composer.textView.onKeyDown = { [weak self] event in
@@ -629,6 +633,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
         guard written || (!isBusy && !queued.isEmpty) else { return }
         if !text.isEmpty { profile.agentHistory.addPrompt(text) }
         recalled = nil
+        composer.didSend()
         composer.text = ""
         composer.attachments = []
         skillCompletion.hide()
@@ -715,18 +720,21 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     func showOptions() {
         let options = modelOptions
         composer.showOptions(
-            model: options.shortTitle(for: choice), summary: options.summary(for: choice), isDefault: options.isDefault,
-            tools: tools
+            model: options.modelTitle(for: choice), summary: options.summary(for: choice),
+            isDefault: options.model == nil && options.context == nil && !options.fast,
+            effort: options.effort, hasEfforts: !choice.effortLevels(model: options.model).isEmpty, tools: tools
         )
     }
 
     @objc private func showModel(_ sender: NSButton) { onModel?(sender) }
+    @objc private func showEffort(_ sender: NSButton) { onEffort?(sender) }
     @objc private func showTools(_ sender: NSButton) { onTools?(sender) }
 
     #if DEBUG
     /// Clicks the model or tools button for `ui.agentAction`, so what opens
     /// hangs off that button, as it does for a real click.
     func modelForTesting() { onModel?(composer.modelButton) }
+    func effortForTesting() { onEffort?(composer.effortButton) }
     func toolsForTesting() { onTools?(composer.toolsButton) }
     #endif
 
@@ -1365,7 +1373,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     private func showIdle() {
         setBusy(false)
         setStatus(session == nil ? "" : "Ready", busy: false)
-        composer.placeholder = "Ask \(profile.providers.displayName(choice)) about this page…"
+        composer.placeholder = "Ask \(profile.providers.displayName(choice)) about this page, / for skills"
         composer.shortPlaceholder = "Ask \(profile.providers.displayName(choice))…"
         emptyState.show(choice, name: profile.providers.displayName(choice))
         let showEmpty = transcript.isEmpty && recordsLoaded

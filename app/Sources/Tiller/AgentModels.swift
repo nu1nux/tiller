@@ -50,16 +50,23 @@ struct AgentModelOptions: Codable, Equatable {
         return parts.joined(separator: " · ")
     }
 
-    /// The model's name, and its effort when set, for the message field's
-    /// model button: `Opus · high`. The CLI's own model goes by its name
-    /// when the CLI has said which it is.
+    /// The model's name, and fast mode when on, for the message field's
+    /// model button: `Opus · fast`. The CLI's own model goes by its name
+    /// when the CLI has said which it is. The effort has a button of its own.
     @MainActor
-    func shortTitle(for kind: AgentChoice) -> String {
+    func modelTitle(for kind: AgentChoice) -> String {
         let fallback = kind.provider == nil && kind.kind == .codex ? AgentModelCatalog.codexModel(nil)?.name : nil
         var parts = [model.map { kind.modelName($0) } ?? fallback ?? "Default model"]
-        if let effort { parts.append(effort) }
         if fast { parts.append("fast") }
         return parts.joined(separator: " · ")
+    }
+
+    /// An effort as a menu or button shows it: `High`, `Extra high`.
+    static func effortTitle(_ effort: String) -> String {
+        switch effort {
+        case "xhigh": "Extra high"
+        default: effort.prefix(1).uppercased() + effort.dropFirst()
+        }
     }
 }
 
@@ -314,6 +321,7 @@ final class AgentModelMenu: NSObject {
     private let menu = NSMenu()
     private var locked = false
     private var note: String?
+    private var effortOnly = false
 
     private let profile: ProfileContext
 
@@ -329,16 +337,18 @@ final class AgentModelMenu: NSObject {
 
     /// Pops the menu up just below `view`, or with `above` just above it.
     /// `locked` greys every choice out, with `note` saying why; `note`
-    /// otherwise goes at the bottom.
+    /// otherwise goes at the bottom. `effortOnly` leaves out all but the
+    /// thinking effort, for the message field's effort button.
     static func popUp(
         from view: NSView, above: Bool = false, kind: AgentChoice, profile: ProfileContext, options: AgentModelOptions, locked: Bool = false,
-        note: String? = nil, onChange: @escaping (AgentModelOptions) -> Void
+        note: String? = nil, effortOnly: Bool = false, onChange: @escaping (AgentModelOptions) -> Void
     ) {
         if kind.provider == nil { AgentModelCatalog.refresh(kind.kind, profile: profile) }
         let controller = AgentModelMenu(kind: kind, profile: profile, options: options, onChange: onChange)
         current = controller
         controller.locked = locked
         controller.note = note
+        controller.effortOnly = effortOnly
         controller.build()
         // The CLI may answer while the menu is open, which then fills in.
         NotificationCenter.default.addObserver(
@@ -369,6 +379,12 @@ final class AgentModelMenu: NSObject {
             menu.addItem(item)
         }
 
+        if effortOnly {
+            addEfforts(add)
+            addNote()
+            return
+        }
+
         menu.addItem(.sectionHeader(title: "Model"))
         add("Default", checked: options.model == nil) { $0.model = nil }
         let models = profile.providers.models(for: kind)
@@ -391,14 +407,9 @@ final class AgentModelMenu: NSObject {
         custom.indentationLevel = 1
         menu.addItem(custom)
 
-        let efforts = kind.effortLevels(model: options.model)
-        if !efforts.isEmpty {
+        if !kind.effortLevels(model: options.model).isEmpty {
             menu.addItem(.separator())
-            menu.addItem(.sectionHeader(title: "Thinking effort"))
-            add("Default", checked: options.effort == nil) { $0.effort = nil }
-            for effort in efforts {
-                add(effort, checked: options.effort == effort) { $0.effort = effort }
-            }
+            addEfforts(add)
         }
 
         let sizes = kind.contextSizes
@@ -422,12 +433,23 @@ final class AgentModelMenu: NSObject {
             menu.items.last?.indentationLevel = 0
         }
 
-        if let note {
-            menu.addItem(.separator())
-            let item = NSMenuItem(title: note, action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            menu.addItem(item)
+        addNote()
+    }
+
+    private func addEfforts(_ add: (String, Bool, Bool, String?, @escaping (inout AgentModelOptions) -> Void) -> Void) {
+        menu.addItem(.sectionHeader(title: "Thinking effort"))
+        add("Default", options.effort == nil, true, nil) { $0.effort = nil }
+        for effort in kind.effortLevels(model: options.model) {
+            add(AgentModelOptions.effortTitle(effort), options.effort == effort, true, nil) { $0.effort = effort }
         }
+    }
+
+    private func addNote() {
+        guard let note else { return }
+        menu.addItem(.separator())
+        let item = NSMenuItem(title: note, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        menu.addItem(item)
     }
 
     private final class Change {

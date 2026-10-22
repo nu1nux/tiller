@@ -14,7 +14,7 @@ A chat is saved with its first message. Its title is the first line of that mess
 
 ## Model and effort
 
-The button along the bottom of the message field that names the model, next to the plus button, picks the chat's model, thinking effort, context window and fast mode, where its CLI has them. It shows the model and the effort, or Default model while the CLI picks (Codex's default goes by its name), reads brighter when any is set, and its tooltip names them all. Each section's Default passes no flag, so the CLI's own choice applies, including what your CLI settings set. Settings > Agent > Model sets them for new chats, per agent. Like the tools, the choice is saved with the chat, and a change stops the chat's agent so the next message resumes its session with the new flags. The menu is locked while a turn runs.
+The button along the bottom of the message field that names the model, next to the plus button, picks the chat's model, thinking effort, context window and fast mode, where its CLI has them. It shows the model, or Default model while the CLI picks (Codex's default goes by its name), reads brighter when any is set, and its tooltip names them all. The button after it shows the thinking effort, or Effort while the CLI picks, and opens just the efforts; it is hidden for an agent without them. Each section's Default passes no flag, so the CLI's own choice applies, including what your CLI settings set. Settings > Agent > Model sets them for new chats, per agent. Like the tools, the choice is saved with the chat, and a change stops the chat's agent so the next message resumes its session with the new flags. The menu is locked while a turn runs.
 
 | | Model | Thinking effort | Context window | Fast mode |
 |---|---|---|---|---|
