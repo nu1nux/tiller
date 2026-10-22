@@ -61,6 +61,14 @@ struct ComposerTests {
         #expect(!composer.sendButton.isEnabled)
     }
 
+    @Test func dictateButtonSitsBesideSend() {
+        let (window, composer) = makeComposer()
+        defer { window.close() }
+        #expect(composer.dictateButton.action != nil)
+        #expect(composer.dictateButton.frame.maxX <= composer.sendButton.frame.minX)
+        #expect(abs(composer.dictateButton.frame.midY - composer.sendButton.frame.midY) <= 1)
+    }
+
     @Test func queuedMessagesEnableSend() {
         let (window, composer) = makeComposer()
         defer { window.close() }

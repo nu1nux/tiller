@@ -555,6 +555,20 @@ extension NSView {
         animation.duration = duration
         layer.add(animation, forKey: "pop")
     }
+
+    /// Cross-fades what the view's layer draws next from what it draws now,
+    /// for a change of title, tint or hint that would otherwise swap in the
+    /// same frame. Call it just before the change. Nothing under Reduce
+    /// Motion or out of a window.
+    @MainActor
+    func crossfade(duration: TimeInterval = Theme.Duration.standard) {
+        guard !Theme.reduceMotion, window != nil, let layer else { return }
+        let fade = CATransition()
+        fade.type = .fade
+        fade.duration = duration
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(fade, forKey: "crossfade")
+    }
 }
 
 extension NSView {

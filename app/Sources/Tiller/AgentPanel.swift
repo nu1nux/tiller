@@ -850,9 +850,9 @@ private final class SuggestionButton: NSView {
 /// The message field: a rounded card with the text across its full width on
 /// top, easing taller with what is typed up to a few lines, and a row of
 /// controls along its bottom: the add button, the chat's model, effort and
-/// tools, and the send/stop button. Attached images show above the text.
-/// Images pasted or dropped on it go to `onImages`, and a hint says so while
-/// they are dragged over it.
+/// tools, then dictation and the send/stop button. Attached images show
+/// above the text. Images pasted or dropped on it go to `onImages`, and a
+/// hint says so while they are dragged over it.
 final class Composer: NSView {
     let textView = PlaceholderTextView()
     let sendButton = SendButton()
@@ -865,6 +865,8 @@ final class Composer: NSView {
     let effortButton = ComposerChip()
     /// Tinted while any built-in tool is on, and opens their menu.
     let toolsButton = Theme.iconButton("wrench.and.screwdriver", label: "Tools", size: Theme.Symbol.row)
+    /// Starts macOS dictation into the field, beside the send button.
+    let dictateButton = Theme.iconButton("mic", label: "Dictate", size: Theme.Symbol.bar)
     var onImages: (([NSImage]) -> Void)?
     var onOpenImage: ((Int) -> Void)?
     private let undo = UndoManager()
@@ -887,7 +889,7 @@ final class Composer: NSView {
             // The hint takes the card's middle while what is in it steps back.
             dropHint.setShown(isDropTarget, fadesOut: true, duration: Theme.Duration.standard)
             if isDropTarget { dropHint.dropIn(distance: 4, duration: Theme.Duration.slide) }
-            for view in [scrollView, thumbnails, controls, sendButton] as [NSView] {
+            for view in [scrollView, thumbnails, controls, dictateButton, sendButton] as [NSView] {
                 view.fadeAlpha(to: isDropTarget ? 0.15 : 1, duration: Theme.Duration.standard)
             }
         }
@@ -946,7 +948,11 @@ final class Composer: NSView {
     }
 
     private func updatePlaceholder() {
-        textView.placeholder = isBusy ? "Queue a follow-up…" : placeholder
+        let hint = isBusy ? "Queue a follow-up…" : placeholder
+        guard hint != textView.placeholder || (isBusy ? "Follow up…" : shortPlaceholder) != textView.shortPlaceholder else { return }
+        // A showing hint fades into the next rather than swapping.
+        if textView.string.isEmpty { textView.crossfade() }
+        textView.placeholder = hint
         textView.shortPlaceholder = isBusy ? "Follow up…" : shortPlaceholder
     }
 
@@ -968,12 +974,17 @@ final class Composer: NSView {
         modelButton.isEmphasized = !isDefault
         modelButton.toolTip = "Model: " + summary
         modelButton.setAccessibilityValue(summary)
-        effortButton.isHidden = !hasEfforts
+        // A model with efforts brings the button in with a fade.
+        effortButton.setShown(hasEfforts, duration: Theme.Duration.standard)
         effortButton.title = effort.map(AgentModelOptions.effortTitle) ?? "Effort"
         effortButton.isEmphasized = effort != nil
         effortButton.toolTip = "Thinking effort: " + (effort.map(AgentModelOptions.effortTitle) ?? "the CLI's default")
         effortButton.setAccessibilityValue(effort ?? "default")
-        toolsButton.contentTintColor = tools.isEmpty ? Theme.secondaryText : Theme.accentColor
+        let toolsTint = tools.isEmpty ? Theme.secondaryText : Theme.accentColor
+        if toolsButton.contentTintColor != toolsTint {
+            toolsButton.crossfade()
+            toolsButton.contentTintColor = toolsTint
+        }
         toolsButton.toolTip = tools.isEmpty
             ? "Tools: browser only"
             : "Tools: browser, " + tools.map { $0.displayName.lowercased() }.joined(separator: ", ")
@@ -1038,7 +1049,12 @@ final class Composer: NSView {
         dropHint.spacing = 6
         dropHint.isHidden = true
 
-        for view in [thumbnails, scrollView, controls, sendButton, dropHint] {
+        dictateButton.contentTintColor = Theme.secondaryText
+        (dictateButton as? HoverButton)?.plateRadius = Theme.ButtonSize.bar / 2
+        dictateButton.target = self
+        dictateButton.action = #selector(dictate(_:))
+
+        for view in [thumbnails, scrollView, controls, dictateButton, sendButton, dropHint] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -1059,7 +1075,9 @@ final class Composer: NSView {
             sendButton.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.controlInset),
             controls.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.controlInset),
             controls.centerYAnchor.constraint(equalTo: sendButton.centerYAnchor),
-            controls.trailingAnchor.constraint(lessThanOrEqualTo: sendButton.leadingAnchor, constant: -8),
+            dictateButton.trailingAnchor.constraint(equalTo: sendButton.leadingAnchor, constant: -4),
+            dictateButton.centerYAnchor.constraint(equalTo: sendButton.centerYAnchor),
+            controls.trailingAnchor.constraint(lessThanOrEqualTo: dictateButton.leadingAnchor, constant: -8),
 
             dropHint.centerXAnchor.constraint(equalTo: centerXAnchor),
             dropHint.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -1136,6 +1154,13 @@ final class Composer: NSView {
     /// Marks a message going out: the send arrow lifts away.
     func didSend() {
         sendButton.launch()
+    }
+
+    /// Puts the caret in the field and asks macOS to dictate into it, as
+    /// Edit > Start Dictation does.
+    @objc private func dictate(_ sender: Any?) {
+        window?.makeFirstResponder(textView)
+        if !NSApp.sendAction(Selector(("startDictation:")), to: nil, from: sender) { NSSound.beep() }
     }
 
     private func updateSendButton() {
@@ -1238,7 +1263,8 @@ final class Composer: NSView {
 /// greys out with nothing to send, and a square on the same disc while a turn
 /// can be stopped. The disc eases between states, dips under a press and pops
 /// a little as it comes on; the glyph turns into the other one, and the
-/// arrow lifts away as a message goes.
+/// arrow lifts away as a message goes. While the stop square shows, a short
+/// arc circles inside the disc's edge to say the agent is working.
 final class SendButton: NSButton {
     enum Mode { case send, stop }
 
@@ -1247,6 +1273,7 @@ final class SendButton: NSButton {
     private(set) var mode = Mode.send
     private let disc = CALayer()
     private let glyph = CALayer()
+    private let ring = CAShapeLayer()
     /// What the glyph last showed, so a change of mode or of being enabled
     /// is animated once, not on every hover redraw.
     private var shownMode: Mode?
@@ -1267,6 +1294,12 @@ final class SendButton: NSButton {
         setButtonType(.momentaryChange)
         layer?.addSublayer(disc)
         disc.addSublayer(glyph)
+        disc.addSublayer(ring)
+        ring.fillColor = nil
+        ring.lineWidth = 1.5
+        ring.lineCap = .round
+        ring.strokeEnd = 0.3
+        ring.opacity = 0
         disc.cornerCurve = .circular
         // The arrow leaving goes out of sight at the disc's edge.
         disc.masksToBounds = true
@@ -1306,6 +1339,8 @@ final class SendButton: NSButton {
         disc.position = CGPoint(x: bounds.midX, y: bounds.midY)
         disc.cornerRadius = side / 2
         glyph.frame = disc.bounds
+        ring.frame = disc.bounds
+        ring.path = CGPath(ellipseIn: disc.bounds.insetBy(dx: 3, dy: 3), transform: nil)
 
         let fill: NSColor
         let ink: NSColor
@@ -1341,6 +1376,7 @@ final class SendButton: NSButton {
         shownEnabled = isEnabled
         glyph.contents = image
         glyph.contentsScale = window?.backingScaleFactor ?? 2
+        updateRing(ink: ink)
         guard window != nil, !Theme.reduceMotion else { return }
         if modeChanged, CACurrentMediaTime() - launched < 0.5 {
             let fade = CATransition()
@@ -1363,6 +1399,47 @@ final class SendButton: NSButton {
         } else if cameOn {
             disc.add(Self.spring(keyPath: "transform.scale", from: 0.86, overshoot: 1.06), forKey: "on")
         }
+    }
+
+    /// Shows the arc and keeps it turning while the stop square shows, in a
+    /// window and without Reduce Motion, where a still arc would read as
+    /// something stuck.
+    private func updateRing(ink: NSColor) {
+        let spins = mode == .stop && window != nil && !Theme.reduceMotion
+        ring.strokeColor = ink.dynamic(alpha: 0.55).layerColor
+        guard spins else {
+            guard ring.animation(forKey: "spin") != nil else { return }
+            // Fades, then stops turning, unless the square came back meanwhile.
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Theme.reduceMotion ? 0 : Theme.Duration.slide
+                context.allowsImplicitAnimation = true
+                ring.opacity = 0
+            } completionHandler: { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.mode != .stop else { return }
+                    self.ring.removeAnimation(forKey: "spin")
+                }
+            }
+            return
+        }
+        withEasing(Theme.Duration.slide) { ring.opacity = 1 }
+        if ring.animation(forKey: "spin") == nil {
+            let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+            // Clockwise whichever way up the layer is drawn.
+            let turn: CGFloat = disc.contentsAreFlipped() ? 2 * .pi : -2 * .pi
+            spin.fromValue = 0
+            spin.toValue = turn
+            spin.duration = 1
+            spin.repeatCount = .infinity
+            spin.isRemovedOnCompletion = false
+            ring.add(spin, forKey: "spin")
+        }
+    }
+
+    /// The spin is dropped with the window and taken up again in the next.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        needsDisplay = true
     }
 
     /// Scales from `from` past `overshoot` to full size.
@@ -1457,7 +1534,12 @@ final class ComposerChip: HoverButton {
     }
 
     override var title: String {
-        didSet { if title != oldValue { updateTitle() } }
+        didSet {
+            guard title != oldValue else { return }
+            // A new model or effort fades in over the old name.
+            crossfade()
+            updateTitle()
+        }
     }
 
     override init(frame: NSRect) {

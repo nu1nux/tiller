@@ -16,6 +16,12 @@ beta shows what `## Unreleased` holds at the time.
   the send arrow lifts away as a message goes and turns into the stop
   square while the agent works, and images dragged over the field show a
   Drop images to attach hint. Reduce Motion turns the motion off.
+- A microphone button beside the send button starts dictation into the
+  agent panel's message field. While the agent works, a short arc circles
+  inside the stop button. The model and effort names, the tools button's
+  tint and the field's hint fade into their new values, and the effort
+  button fades in for a model that has efforts. Reduce Motion turns the
+  motion off.
 
 ## 0.4.2
 

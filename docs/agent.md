@@ -26,6 +26,10 @@ The button along the bottom of the message field that names the model, next to t
 
 Tiller asks each CLI for its models in the background, once per launch, and keeps the list for the next, so the menu shows last time's until the CLI answers. Custom… takes any id or alias the CLI's `--model` accepts. Claude Code may turn fast mode off where the account or model can't have it; the chat then notes why. Codex runs at standard speed unless fast mode is on, and with Default picked, on the model Codex lists as its default.
 
+## Dictation
+
+The microphone button beside the send button starts macOS dictation into the message field, as Edit > Start Dictation does. Dictation must be on in System Settings > Keyboard.
+
 ## Image attachments
 
 A message can carry up to five images. Paste one with Cmd+V (a screenshot, an image copied from a page, or image files copied in Finder), drop images on the field, or pick them with Add Images in the plus button's menu at the bottom left of the field. They show as thumbnails above the text, each with a button to remove it, and clicking a thumbnail, there or in the transcript, opens it in Quick Look. Tiller scales each image down to 2000 pixels on its long edge and saves it as PNG, or as JPEG if the PNG is over 3.5 MB, in the chat's folder. Claude Code and Qoder CLI get the image in the message, and Codex, Antigravity CLI and Grok Build get the file's path. The images stay with the chat and are deleted with it; images attached but never sent are deleted when the tab closes.
