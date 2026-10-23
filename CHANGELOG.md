@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+## 0.4.3
+
 - The agent panel's message field is restyled after Codex's: a rounder
   card with more room around the text, whose edge firms up under the
   mouse and with focus instead of glowing in the accent, and a send
