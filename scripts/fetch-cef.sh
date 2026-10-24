@@ -9,12 +9,12 @@ set -euo pipefail
 
 CEF_RS_TAG="cef-v154.5.0+154.0.34"
 CEF_VERSION="154.0.34"
-CODECS_URL="https://github.com/sorrycc/Tiller/releases/download/cef-codecs-154.0.34/cef-154.0.34-macosarm64-codecs.tar.zst"
+CODECS_URL="https://github.com/sorrycc/Tiller/releases/download/cef-codecs-154.0.34-tabs/cef-154.0.34-macosarm64-codecs.tar.zst"
 CODECS_VERSION="154.0.34"
 # The codecs build is unsigned, made with build-cef-codecs.sh and kept on this
-# repository's cef-codecs-154.0.34 release: this is that archive's hash.
+# repository's cef-codecs-154.0.34-tabs release: this is that archive's hash.
 # Change both together. bump.sh checks the URL still works before tagging.
-CODECS_SHA256="1f44d03c7b9a4eca4226871bc06c89d9dbe6a4d7aa09d2fc10f2fd62806afa81"
+CODECS_SHA256="147c497abc1b13162ddd515cf7bd3c0759ef6b3f9e1aa62c5a8d01fb4c72b88e"
 FRAMEWORK="Chromium Embedded Framework.framework"
 CEF_PATH="${CEF_PATH:-$HOME/.local/share/cef}"
 CODECS_DIR="$HOME/.local/share/cef-codecs"
@@ -39,7 +39,9 @@ else
     cargo run --quiet --manifest-path "$TMP/cef-rs/Cargo.toml" -p export-cef-dir -- --force "$CEF_PATH"
 fi
 
-if has_version "$CODECS_DIR" "$CODECS_VERSION"; then
+# Builds of one version differ in Tiller's patches, so the archive's hash,
+# kept beside the framework, has to match too.
+if has_version "$CODECS_DIR" "$CODECS_VERSION" && [ "$(cat "$CODECS_DIR/.sha256" 2>/dev/null)" = "$CODECS_SHA256" ]; then
     echo "==> CEF $CODECS_VERSION with codecs already at $CODECS_DIR"
 else
     echo "==> downloading CEF $CODECS_VERSION with codecs to $CODECS_DIR"
@@ -52,4 +54,5 @@ else
     rm -rf "$CODECS_DIR"
     mkdir -p "$CODECS_DIR"
     tar --use-compress-program=unzstd -xf "$TMP/codecs.tar.zst" -C "$CODECS_DIR"
+    echo "$CODECS_SHA256" > "$CODECS_DIR/.sha256"
 fi

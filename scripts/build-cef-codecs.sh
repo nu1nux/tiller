@@ -2,7 +2,8 @@
 # Builds the CEF framework with H.264 and AAC that fetch-cef.sh downloads, for
 # the CEF version pinned there, and packs it as the cef-codecs-<version>
 # release asset docs/releasing.md describes. The stock CEF builds leave those
-# codecs out. Needs an Apple Silicon Mac, Xcode with its Metal Toolchain
+# codecs out. It also applies Tiller's patches in cef-patches, which show
+# Tiller's tabs to extensions. Needs an Apple Silicon Mac, Xcode with its Metal Toolchain
 # (xcodebuild -downloadComponent MetalToolchain), about 150 GB free and
 # several hours, and access to Google's servers, through a proxy in
 # https_proxy if need be. A rerun picks up where the last one stopped.
@@ -23,7 +24,22 @@ cd "$ROOT"
 GN_DEFINES="is_official_build=true proprietary_codecs=true ffmpeg_branding=Chrome" \
 python3 automate-git.py --download-dir="$ROOT/code" --branch="$CEF_BRANCH" --checkout="$CEF_COMMIT" \
     --arm64-build --no-debug-build --no-distrib --with-pgo-profiles \
-    --no-chromium-history --build-target=cefsimple --build-log-file
+    --no-chromium-history --no-build
+
+# Tiller's own changes, on top of CEF's: cef.patch to the cef folder and
+# chromium.patch to Chromium's. A rerun skips one already applied.
+SRC="$ROOT/code/chromium/src"
+PATCHES="$(cd "$(dirname "$0")" && pwd)/cef-patches"
+apply_patch() {
+    if git -C "$1" apply --reverse --check "$2" 2>/dev/null; then
+        echo "==> $(basename "$2") already applied"
+    else
+        git -C "$1" apply "$2"
+    fi
+}
+apply_patch "$SRC/cef" "$PATCHES/cef.patch"
+apply_patch "$SRC" "$PATCHES/chromium.patch"
+PATH="$ROOT/code/depot_tools:$PATH" autoninja -C "$SRC/out/Release_GN_arm64" cefsimple
 
 # The build's framework has a Versions folder; the stock download's, which
 # the app expects, holds that version's files directly.

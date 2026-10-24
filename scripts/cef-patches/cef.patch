@@ -1,0 +1,197 @@
+diff --git a/libcef/browser/chrome/extensions/chrome_extension_util.cc b/libcef/browser/chrome/extensions/chrome_extension_util.cc
+index ae13b2262..8a04f1e41 100644
+--- a/libcef/browser/chrome/extensions/chrome_extension_util.cc
++++ b/libcef/browser/chrome/extensions/chrome_extension_util.cc
+@@ -5,6 +5,10 @@
+ #include "cef/libcef/browser/chrome/extensions/chrome_extension_util.h"
+ 
+ #include "cef/libcef/browser/browser_host_base.h"
++#include <map>
++
++#include "base/no_destructor.h"
++#include "components/sessions/core/session_id.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "components/sessions/content/session_tab_helper.h"
+ #include "content/public/browser/render_frame_host.h"
+@@ -71,4 +75,135 @@ bool IsAlloyContents(content::WebContents* contents, bool primary_only) {
+   return false;
+ }
+ 
++namespace {
++
++// Calls tiller_ext_add_window once for each window, the most recently active
++// first, synchronously on the UI thread.
++using TillerWindowProvider = void (*)(void* ctx);
++TillerWindowProvider g_provider = nullptr;
++void* g_provider_ctx = nullptr;
++
++// Filled by the provider while GetAllTillerWindows runs.
++std::vector<TillerWindow>* g_collecting = nullptr;
++
++// Window ids handed to extensions, by the app's key for the window, so they
++// don't collide with Chrome style windows' ids.
++std::map<int, SessionID>& WindowIds() {
++  static base::NoDestructor<std::map<int, SessionID>> ids;
++  return *ids;
++}
++
++std::vector<TillerWindow> GetAllTillerWindows() {
++  std::vector<TillerWindow> windows;
++  if (!g_provider || g_collecting) {
++    return windows;
++  }
++  g_collecting = &windows;
++  g_provider(g_provider_ctx);
++  g_collecting = nullptr;
++  return windows;
++}
++
++bool ProfileMatches(content::WebContents* contents,
++                    Profile* profile,
++                    bool include_incognito) {
++  Profile* tab_profile = Profile::FromBrowserContext(contents->GetBrowserContext());
++  return tab_profile == profile ||
++         (include_incognito && profile->IsSameOrParent(tab_profile));
++}
++
++}  // namespace
++
++std::vector<TillerWindow> GetTillerWindows(Profile* profile,
++                                           bool include_incognito) {
++  std::vector<TillerWindow> windows;
++  for (auto& window : GetAllTillerWindows()) {
++    content::WebContents* active =
++        window.active_index >= 0
++            ? window.tabs[static_cast<size_t>(window.active_index)]
++            : nullptr;
++    TillerWindow filtered = window;
++    filtered.tabs.clear();
++    filtered.active_index = -1;
++    for (auto* contents : window.tabs) {
++      if (!ProfileMatches(contents, profile, include_incognito)) {
++        continue;
++      }
++      if (contents == active) {
++        filtered.active_index = static_cast<int>(filtered.tabs.size());
++      }
++      filtered.tabs.push_back(contents);
++    }
++    if (!filtered.tabs.empty()) {
++      windows.push_back(std::move(filtered));
++    }
++  }
++  return windows;
++}
++
++bool GetTillerTab(content::WebContents* contents,
++                  TillerWindow* window,
++                  int* index) {
++  for (auto& candidate : GetAllTillerWindows()) {
++    for (size_t i = 0; i < candidate.tabs.size(); ++i) {
++      if (candidate.tabs[i] == contents) {
++        *index = static_cast<int>(i);
++        *window = std::move(candidate);
++        return true;
++      }
++    }
++  }
++  return false;
++}
++
+ }  // namespace cef
++
++// The C entry points Tiller finds with dlsym, so the app still runs with a
++// framework that lacks them.
++
++extern "C" __attribute__((visibility("default"))) void
++tiller_ext_set_window_provider(void* ctx, void (*provider)(void* ctx)) {
++  cef::g_provider = provider;
++  cef::g_provider_ctx = ctx;
++}
++
++// Adds one window while the provider runs: |key| is the app's own id for it,
++// |browser_ids| its tabs' browser ids in tab order, and |active_browser_id|
++// the selected tab's. |left| and |top| are from the top left of the primary
++// screen.
++extern "C" __attribute__((visibility("default"))) void tiller_ext_add_window(
++    int key,
++    bool focused,
++    int left,
++    int top,
++    int width,
++    int height,
++    const int* browser_ids,
++    int count,
++    int active_browser_id) {
++  if (!cef::g_collecting) {
++    return;
++  }
++  auto& ids = cef::WindowIds();
++  auto it = ids.find(key);
++  if (it == ids.end()) {
++    it = ids.emplace(key, SessionID::NewUnique()).first;
++  }
++  cef::TillerWindow window;
++  window.id = it->second.id();
++  window.focused = focused;
++  window.bounds = gfx::Rect(left, top, width, height);
++  for (int i = 0; i < count; ++i) {
++    auto browser = CefBrowserHostBase::GetBrowserForBrowserId(browser_ids[i]);
++    content::WebContents* contents =
++        browser ? browser->GetWebContents() : nullptr;
++    if (!contents) {
++      continue;
++    }
++    if (browser_ids[i] == active_browser_id) {
++      window.active_index = static_cast<int>(window.tabs.size());
++    }
++    window.tabs.push_back(contents);
++  }
++  cef::g_collecting->push_back(std::move(window));
++}
+diff --git a/libcef/browser/chrome/extensions/chrome_extension_util.h b/libcef/browser/chrome/extensions/chrome_extension_util.h
+index 74a22cd5f..4098de396 100644
+--- a/libcef/browser/chrome/extensions/chrome_extension_util.h
++++ b/libcef/browser/chrome/extensions/chrome_extension_util.h
+@@ -6,6 +6,10 @@
+ #define CEF_LIBCEF_BROWSER_CHROME_EXTENSIONS_CHROME_EXTENSION_UTIL_H_
+ #pragma once
+ 
++#include <vector>
++
++#include "ui/gfx/geometry/rect.h"
++
+ namespace content {
+ class WebContents;
+ }  // namespace content
+@@ -25,6 +29,30 @@ bool GetAlloyTabById(int tab_id,
+ // If |primary_only| is false then guest contents will also be matched.
+ bool IsAlloyContents(content::WebContents* contents, bool primary_only);
+ 
++// A window of the embedding app, for the tabs and windows extension APIs,
++// which otherwise only see Chrome style windows. Tiller reports these through
++// tiller_ext_set_window_provider.
++struct TillerWindow {
++  int id = -1;
++  bool focused = false;
++  gfx::Rect bounds;
++  // In tab order. Tabs without a live browser are left out.
++  std::vector<content::WebContents*> tabs;
++  int active_index = -1;
++};
++
++// The app's windows with tabs of |profile| (and its incognito profile when
++// |include_incognito|), the most recently active first, holding only those
++// tabs. Empty when the app reports none.
++std::vector<TillerWindow> GetTillerWindows(Profile* profile,
++                                           bool include_incognito);
++
++// The window holding |contents| and the tab's index in it, from every
++// profile's windows. False when no app window holds it.
++bool GetTillerTab(content::WebContents* contents,
++                  TillerWindow* window,
++                  int* index);
++
+ }  // namespace cef
+ 
+ #endif  // CEF_LIBCEF_BROWSER_CHROME_EXTENSIONS_CHROME_EXTENSION_UTIL_H_

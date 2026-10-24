@@ -32,6 +32,7 @@ let code = tiller_core_start(
     Profiles.chromiumRoot, firstCachePath, ExtensionStore.shared.launchArgument, Settings.remoteDebuggingEnabled ? 9222 : 0
 )
 if code != 0 { exit(code) }
+ExtensionWindows.install()
 
 let app = NSApplication.shared
 let delegate = AppDelegate()

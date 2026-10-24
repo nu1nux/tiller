@@ -1,0 +1,294 @@
+diff --git a/chrome/browser/extensions/extension_tab_util.cc b/chrome/browser/extensions/extension_tab_util.cc
+index da312fc..17a45f1 100644
+--- a/chrome/browser/extensions/extension_tab_util.cc
++++ b/chrome/browser/extensions/extension_tab_util.cc
+@@ -376,6 +376,22 @@ api::tabs::Tab ExtensionTabUtil::CreateTabObject(
+   tab_object.highlighted = tab_interface && tab_interface->IsSelected();
+   tab_object.pinned = tab_interface && tab_interface->IsPinned();
+ 
++#if BUILDFLAG(ENABLE_CEF)
++  // A tab in one of the embedding app's windows, which has no tab list.
++  if (!tab_list) {
++    cef::TillerWindow tiller_window;
++    int tiller_index = -1;
++    if (cef::GetTillerTab(contents, &tiller_window, &tiller_index)) {
++      const bool tiller_active = tiller_index == tiller_window.active_index;
++      tab_object.index = tiller_index;
++      tab_object.window_id = tiller_window.id;
++      tab_object.active = tiller_active;
++      tab_object.selected = tiller_active;
++      tab_object.highlighted = tiller_active;
++    }
++  }
++#endif
++
+   tab_object.group_id = -1;
+   if (tab_interface) {
+     std::optional<tab_groups::TabGroupId> group = tab_interface->GetGroup();
+diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
+index a6b39be..10796f2 100644
+--- a/chrome/browser/extensions/api/tabs/tabs_api.cc
++++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
+@@ -105,6 +105,11 @@
+ #include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service.h"
+ #endif
+ 
++#include "cef/libcef/features/features.h"
++#if BUILDFLAG(ENABLE_CEF)
++#include "cef/libcef/browser/chrome/extensions/chrome_extension_util.h"
++#endif
++
+ static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+ 
+ namespace extensions {
+@@ -813,6 +818,171 @@ bool WindowBoundsIntersectDisplays(const gfx::Rect& bounds) {
+ 
+ }  // namespace tabs_internal
+ 
++#if BUILDFLAG(ENABLE_CEF)
++namespace {
++
++// Windows of the embedding app (Tiller), whose Alloy style tabs aren't in
++// any Chrome window. They're all of the "normal" type.
++
++bool TillerWindowsMatchFilter(WindowController::TypeFilter filter) {
++  return filter == WindowController::kNoWindowFilter ||
++         (filter & (1 << std::to_underlying(windows::WindowType::kNormal))) !=
++             0;
++}
++
++std::vector<cef::TillerWindow> GetTillerWindowsForFunction(
++    ExtensionFunction* function) {
++  return cef::GetTillerWindows(
++      Profile::FromBrowserContext(function->browser_context()),
++      function->include_incognito_information());
++}
++
++// The window a function's "current window" means: the one holding the
++// calling tab, or else the most recently active.
++const cef::TillerWindow* GetCurrentTillerWindow(
++    ExtensionFunction* function,
++    const std::vector<cef::TillerWindow>& windows) {
++  if (windows.empty()) {
++    return nullptr;
++  }
++  if (content::WebContents* sender = function->GetSenderWebContents()) {
++    for (const auto& window : windows) {
++      if (std::ranges::find(window.tabs, sender) != window.tabs.end()) {
++        return &window;
++      }
++    }
++  }
++  return &windows.front();
++}
++
++// Like BrowserExtensionWindowController::CreateWindowValueForExtension.
++base::DictValue CreateTillerWindowValue(const cef::TillerWindow& window,
++                                        ExtensionFunction* function,
++                                        bool populate_tabs) {
++  base::DictValue dict;
++  dict.Set("id", window.id);
++  dict.Set("type", "normal");
++  dict.Set("focused", window.focused);
++  dict.Set("incognito",
++           !window.tabs.empty() &&
++               window.tabs.front()->GetBrowserContext()->IsOffTheRecord());
++  dict.Set("alwaysOnTop", false);
++  dict.Set("state", "normal");
++  dict.Set("left", window.bounds.x());
++  dict.Set("top", window.bounds.y());
++  dict.Set("width", window.bounds.width());
++  dict.Set("height", window.bounds.height());
++  if (populate_tabs) {
++    base::ListValue tabs;
++    for (size_t i = 0; i < window.tabs.size(); ++i) {
++      tabs.Append(tabs_internal::CreateTabObjectHelper(
++                      window.tabs[i], function->extension(),
++                      function->source_context_type(), nullptr,
++                      static_cast<int>(i))
++                      .ToValue());
++    }
++    dict.Set(ExtensionTabUtil::kTabsKey, std::move(tabs));
++  }
++  return dict;
++}
++
++// Like TabsQueryFunction::MatchesTab, for a tab without a TabInterface: it's
++// never pinned, grouped, split, frozen or discarded.
++bool TillerTabMatches(const tabs::Query::Params::QueryInfo& query,
++                      const Extension* extension,
++                      content::WebContents* contents,
++                      bool active,
++                      const URLPatternSet& url_patterns) {
++  if (!MatchesBool(query.highlighted, active) ||
++      !MatchesBool(query.active, active) || !MatchesBool(query.pinned, false)) {
++    return false;
++  }
++  if ((query.group_id && *query.group_id != -1) ||
++      (query.split_view_id && *query.split_view_id != -1)) {
++    return false;
++  }
++  if (!MatchesBool(query.audible, contents->IsCurrentlyAudible()) ||
++      !MatchesBool(query.frozen, false) ||
++      !MatchesBool(query.discarded, false) ||
++      !MatchesBool(query.auto_discardable, true) ||
++      !MatchesBool(query.muted, contents->IsAudioMuted())) {
++    return false;
++  }
++  bool check_title = query.title && !query.title->empty();
++  if (check_title || !url_patterns.is_empty()) {
++    if (!extension->permissions_data()->HasAPIPermissionForTab(
++            ExtensionTabUtil::GetTabId(contents),
++            mojom::APIPermissionID::kTab) &&
++        !extension->permissions_data()->HasHostPermission(contents->GetURL())) {
++      return false;
++    }
++    if (check_title && !base::MatchPattern(contents->GetTitle(),
++                                           base::UTF8ToUTF16(*query.title))) {
++      return false;
++    }
++    if (!url_patterns.is_empty() &&
++        !url_patterns.MatchesURL(contents->GetURL())) {
++      return false;
++    }
++  }
++  if (query.status != tabs::TabStatus::kNone &&
++      query.status != ExtensionTabUtil::GetLoadingStatus(contents)) {
++    return false;
++  }
++  return true;
++}
++
++// Adds the app's tabs that match to `result`. The app's windows are the
++// current and last focused ones only when no Chrome window is.
++void AppendTillerTabs(ExtensionFunction* function,
++                      const tabs::Query::Params::QueryInfo& query,
++                      const URLPatternSet& url_patterns,
++                      const std::string& window_type,
++                      int window_id,
++                      int tab_index,
++                      bool has_current_browser,
++                      bool has_last_active_browser,
++                      base::ListValue& result) {
++  if (!window_type.empty() && window_type != "normal") {
++    return;
++  }
++  const std::vector<cef::TillerWindow> windows =
++      GetTillerWindowsForFunction(function);
++  const cef::TillerWindow* current =
++      has_current_browser ? nullptr : GetCurrentTillerWindow(function, windows);
++  const cef::TillerWindow* last_active =
++      has_last_active_browser || windows.empty() ? nullptr : &windows.front();
++  for (const auto& window : windows) {
++    if (window_id >= 0 && window_id != window.id) {
++      continue;
++    }
++    if (window_id == extension_misc::kCurrentWindowId && &window != current) {
++      continue;
++    }
++    if (!MatchesBool(query.current_window, &window == current) ||
++        !MatchesBool(query.last_focused_window, &window == last_active)) {
++      continue;
++    }
++    for (size_t i = 0; i < window.tabs.size(); ++i) {
++      const int index = static_cast<int>(i);
++      if (tab_index > -1 && index != tab_index) {
++        continue;
++      }
++      if (!TillerTabMatches(query, function->extension(), window.tabs[i],
++                            index == window.active_index, url_patterns)) {
++        continue;
++      }
++      result.Append(tabs_internal::CreateTabObjectHelper(
++                        window.tabs[i], function->extension(),
++                        function->source_context_type(), nullptr, index)
++                        .ToValue());
++    }
++  }
++}
++
++}  // namespace
++#endif  // BUILDFLAG(ENABLE_CEF)
++
+ void ZoomModeToZoomSettings(zoom::ZoomController::ZoomMode zoom_mode,
+                             api::tabs::ZoomSettings* zoom_settings) {
+   DCHECK(zoom_settings);
+@@ -842,6 +1012,17 @@ ExtensionFunction::ResponseAction WindowsGetFunction::Run() {
+   EXTENSION_FUNCTION_VALIDATE(params);
+ 
+   tabs_internal::ApiParameterExtractor<windows::Get::Params> extractor(params);
++#if BUILDFLAG(ENABLE_CEF)
++  if (params->window_id >= 0 &&
++      TillerWindowsMatchFilter(extractor.type_filters())) {
++    for (const auto& window : GetTillerWindowsForFunction(this)) {
++      if (window.id == params->window_id) {
++        return RespondNow(WithArguments(CreateTillerWindowValue(
++            window, this, extractor.populate_tabs())));
++      }
++    }
++  }
++#endif
+   WindowController* window_controller = nullptr;
+   std::string error;
+   if (!windows_util::GetControllerFromWindowID(this, params->window_id,
+@@ -870,6 +1051,16 @@ ExtensionFunction::ResponseAction WindowsGetCurrentFunction::Run() {
+   if (!windows_util::GetControllerFromWindowID(
+           this, extension_misc::kCurrentWindowId, extractor.type_filters(),
+           &window_controller, &error)) {
++#if BUILDFLAG(ENABLE_CEF)
++    if (TillerWindowsMatchFilter(extractor.type_filters())) {
++      const std::vector<cef::TillerWindow> windows =
++          GetTillerWindowsForFunction(this);
++      if (const auto* window = GetCurrentTillerWindow(this, windows)) {
++        return RespondNow(WithArguments(
++            CreateTillerWindowValue(*window, this, extractor.populate_tabs())));
++      }
++    }
++#endif
+     return RespondNow(Error(std::move(error)));
+   }
+ 
+@@ -901,6 +1092,16 @@ ExtensionFunction::ResponseAction WindowsGetLastFocusedFunction::Run() {
+         return true;  // Continue iterating.
+       });
+   if (!last_focused_browser) {
++#if BUILDFLAG(ENABLE_CEF)
++    if (TillerWindowsMatchFilter(extractor.type_filters())) {
++      const std::vector<cef::TillerWindow> windows =
++          GetTillerWindowsForFunction(this);
++      if (!windows.empty()) {
++        return RespondNow(WithArguments(CreateTillerWindowValue(
++            windows.front(), this, extractor.populate_tabs())));
++      }
++    }
++#endif
+     return RespondNow(Error(tabs_constants::kNoLastFocusedWindowError));
+   }
+ 
+@@ -934,6 +1135,14 @@ ExtensionFunction::ResponseAction WindowsGetAllFunction::Run() {
+         *controller->GetBrowserWindowInterface(), extension(),
+         populate_tab_behavior, source_context_type()));
+   }
++#if BUILDFLAG(ENABLE_CEF)
++  if (TillerWindowsMatchFilter(extractor.type_filters())) {
++    for (const auto& window : GetTillerWindowsForFunction(this)) {
++      window_list.Append(
++          CreateTillerWindowValue(window, this, extractor.populate_tabs()));
++    }
++  }
++#endif
+ 
+   return RespondNow(WithArguments(std::move(window_list)));
+ }
+@@ -1835,6 +2044,11 @@ ExtensionFunction::ResponseAction TabsQueryFunction::Run() {
+   base::ListValue result =
+       BuildTabList(current_browser, last_active_browser, url_patterns,
+                    window_type, window_id, index);
++#if BUILDFLAG(ENABLE_CEF)
++  AppendTillerTabs(this, query_info_, url_patterns, window_type, window_id,
++                   index, current_browser != nullptr,
++                   last_active_browser != nullptr, result);
++#endif
+ 
+   return RespondNow(WithArguments(std::move(result)));
+ }

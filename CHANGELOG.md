@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+- Extensions see Tiller's tabs and windows, so `chrome.tabs.query` finds the current tab.
+- Extension popups that act on the current tab, such as a page clipper's, now find it.
 - Extensions that talk to a Mac app, such as 1Password, can now connect to it, once the app trusts Tiller.
 
 ## 0.4.4

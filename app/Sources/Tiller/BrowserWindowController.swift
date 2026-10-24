@@ -133,6 +133,13 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
 
     private var tabs: [Tab] = []
     private var selectedTab: Tab?
+    /// What extensions' tabs and windows APIs know this window by.
+    private(set) lazy var extensionWindowKey = ExtensionWindows.makeKey()
+    /// The browser ids of the tabs with a page, in order, and the selected
+    /// tab's, for extensions' tabs and windows APIs.
+    var extensionTabs: (ids: [Int32], active: Int32) {
+        (tabs.map(\.browserID).filter { $0 >= 0 }, selectedTab?.browserID ?? -1)
+    }
     /// Set while every tab closes for a quit or the window closing, so the
     /// session saved just before keeps them all. A page that cancels its
     /// beforeunload leaves tabs open, and the next thing done with the tabs
