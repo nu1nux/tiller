@@ -66,6 +66,7 @@ Tiller keeps its data in `~/Library/Application Support/Tiller`. Set `TILLER_DAT
 | `instance.lock` | Held by the running Tiller, so a second launch hands its profile and links to it instead |
 | `Chromium/` | Chromium's own files, such as `Local State` and `chrome_debug.log` |
 | `Chromium/<id>/` | One profile's Chromium data: cookies, cache and site data |
+| `Chromium/NativeMessagingHosts/` | Links to Chrome's native messaging manifests, made at each launch so extensions can reach their Mac apps. Files put there by hand are kept |
 | `Profiles/<id>/` | One profile: `history.sqlite`, `passwords.json`, `session.json`, `agent-chats/`, `agent-skills/`, `agent-schedules.json`, the agent's working folder, the control socket while it is open, and `instance.lock`, held while it is open |
 | `Profiles/<id>/agent-skills/` | The [skill library](agent.md#tillers-skill-library): `skills.json` lists each skill's name, where it came from (a folder, an archive, Git or an agent) and whether it's on; `library/` holds the skills and `exposed/` links the ones that are on |
 | `Profiles/<id>/agent-schedules.json` | The [scheduled prompts](agent.md#scheduled-prompts): each one's name, prompt, agent, tools, model options, rule, whether it's on, its next run, and its last run with how it went and its chat |

@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+- Extensions that talk to a Mac app, such as 1Password, can now connect to it, once the app trusts Tiller.
+
 ## 0.4.4
 
 - Fix a crash when an extension opens a tab as it's added or as Tiller starts.

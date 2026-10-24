@@ -19,6 +19,7 @@ if let running = Profiles.claimApp() {
     exit(0)
 }
 SingleProcessMigration.run()
+NativeMessagingHosts.link()
 
 // tiller_core_start installs the NSApplication subclass CEF needs, so it has to
 // run before anything touches NSApp. Chromium only loads extensions at startup.
