@@ -9,6 +9,8 @@ beta shows what `## Unreleased` holds at the time.
 
 - Extensions see Tiller's tabs and windows, so `chrome.tabs.query` finds the current tab.
 - Extension popups that act on the current tab, such as a page clipper's, now find it.
+- Extensions can open, select and close Tiller tabs, so 1Password's sign-in tab can finish.
+- 1Password unlocks with its Mac app and shows your items, instead of an endless sign-in page.
 - Extensions that talk to a Mac app, such as 1Password, can now connect to it, once the app trusts Tiller.
 
 ## 0.4.4

@@ -3,7 +3,7 @@
 # the CEF version pinned there, and packs it as the cef-codecs-<version>
 # release asset docs/releasing.md describes. The stock CEF builds leave those
 # codecs out. It also applies Tiller's patches in cef-patches, which show
-# Tiller's tabs to extensions. Needs an Apple Silicon Mac, Xcode with its Metal Toolchain
+# Tiller's tabs to extensions and fix the Origin header of their requests. Needs an Apple Silicon Mac, Xcode with its Metal Toolchain
 # (xcodebuild -downloadComponent MetalToolchain), about 150 GB free and
 # several hours, and access to Google's servers, through a proxy in
 # https_proxy if need be. A rerun picks up where the last one stopped.

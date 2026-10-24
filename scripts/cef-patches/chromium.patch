@@ -26,7 +26,7 @@ index da312fc..17a45f1 100644
    if (tab_interface) {
      std::optional<tab_groups::TabGroupId> group = tab_interface->GetGroup();
 diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
-index a6b39be..10796f2 100644
+index a6b39be..61fd8b5 100644
 --- a/chrome/browser/extensions/api/tabs/tabs_api.cc
 +++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
 @@ -105,6 +105,11 @@
@@ -292,3 +292,81 @@ index a6b39be..10796f2 100644
  
    return RespondNow(WithArguments(std::move(result)));
  }
+@@ -2139,6 +2353,37 @@ ExtensionFunction::ResponseAction TabsCreateFunction::Run() {
+   // TODO(https://crbug.com/468223125): This isn't consistent, since sometimes
+   // we *will* create a new browser below.
+   if (!browser) {
++#if BUILDFLAG(ENABLE_CEF)
++    // Opens the tab in one of the embedding app's windows instead.
++    const std::vector<cef::TillerWindow> tiller_windows =
++        GetTillerWindowsForFunction(this);
++    const int target_window_id =
++        create_properties.window_id.value_or(extension_misc::kCurrentWindowId);
++    const cef::TillerWindow* tiller_window = nullptr;
++    if (target_window_id == extension_misc::kCurrentWindowId) {
++      tiller_window = GetCurrentTillerWindow(this, tiller_windows);
++    } else {
++      for (const auto& window : tiller_windows) {
++        if (window.id == target_window_id) {
++          tiller_window = &window;
++        }
++      }
++    }
++    if (tiller_window) {
++      content::WebContents* contents =
++          cef::CreateTillerTab(*tiller_window, validated_url_,
++                               active_.value_or(true), index_.value_or(-1));
++      if (!contents) {
++        return RespondNow(Error("Couldn't open the tab."));
++      }
++      if (!has_callback()) {
++        return RespondNow(NoArguments());
++      }
++      return RespondNow(ArgumentList(
++          tabs::Create::Results::Create(tabs_internal::CreateTabObjectHelper(
++              contents, extension(), source_context_type(), nullptr, -1))));
++    }
++#endif
+     return RespondNow(Error(std::move(error)));
+   }
+ 
+@@ -2616,6 +2861,15 @@ ExtensionFunction::ResponseAction TabsUpdateFunction::Run() {
+     }
+   }
+ 
++#if BUILDFLAG(ENABLE_CEF)
++  // A tab in one of the embedding app's windows.
++  if (!tab_list && (params->update_properties.active.value_or(false) ||
++                    params->update_properties.selected.value_or(false) ||
++                    params->update_properties.highlighted.value_or(false))) {
++    cef::SelectTillerTab(contents);
++  }
++#endif
++
+   // Cache the original web contents.
+   content::WebContents* original_contents = contents;
+ 
+@@ -3240,8 +3494,21 @@ bool TabsRemoveFunction::RemoveTab(int tab_id, std::string* error) {
+   content::WebContents* contents = nullptr;
+   if (!tabs_internal::GetTabById(tab_id, browser_context(),
+                                  include_incognito_information(), &window,
+-                                 &contents, nullptr, error) ||
+-      !window) {
++                                 &contents, nullptr, error)) {
++    return false;
++  }
++#if BUILDFLAG(ENABLE_CEF)
++  // A tab in one of the embedding app's windows closes the way the app closes
++  // tabs, which is never right away.
++  if (!window && cef::CloseTillerTab(contents)) {
++    web_contents_destroyed_observers_.push_back(
++        std::make_unique<WebContentsDestroyedObserver>(this, contents));
++    AddRef();
++    remaining_tabs_count_++;
++    return true;
++  }
++#endif
++  if (!window) {
+     return false;
+   }
+ 

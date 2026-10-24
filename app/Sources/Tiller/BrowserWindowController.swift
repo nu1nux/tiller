@@ -495,6 +495,26 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
         }
     }
 
+    /// Opens `url` for an extension's `chrome.tabs.create`, at `index` or at
+    /// the end, and returns the new tab's browser id.
+    func openTabForExtension(url: String, select: Bool, at index: Int?) -> Int32 {
+        openTab(url: url, select: select, at: index).browserID
+    }
+
+    /// Selects or closes the tab with `browserID` for an extension. False when
+    /// it isn't one of this window's.
+    func selectTabForExtension(browserID: Int32) -> Bool {
+        guard let tab = tabs.first(where: { $0.browserID == browserID }) else { return false }
+        select(tab)
+        return true
+    }
+
+    func closeTabForExtension(browserID: Int32) -> Bool {
+        guard let tab = tabs.first(where: { $0.browserID == browserID }) else { return false }
+        requestClose(tab)
+        return true
+    }
+
     /// Asks a tab to close on the user's or an agent's behalf.
     private func requestClose(_ tab: Tab) {
         closingAll = false

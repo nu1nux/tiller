@@ -9,12 +9,12 @@ set -euo pipefail
 
 CEF_RS_TAG="cef-v154.5.0+154.0.34"
 CEF_VERSION="154.0.34"
-CODECS_URL="https://github.com/sorrycc/Tiller/releases/download/cef-codecs-154.0.34-tabs/cef-154.0.34-macosarm64-codecs.tar.zst"
+CODECS_URL="https://github.com/sorrycc/Tiller/releases/download/cef-codecs-154.0.34-tabs.2/cef-154.0.34-macosarm64-codecs.tar.zst"
 CODECS_VERSION="154.0.34"
 # The codecs build is unsigned, made with build-cef-codecs.sh and kept on this
-# repository's cef-codecs-154.0.34-tabs release: this is that archive's hash.
+# repository's cef-codecs-154.0.34-tabs.2 release: this is that archive's hash.
 # Change both together. bump.sh checks the URL still works before tagging.
-CODECS_SHA256="147c497abc1b13162ddd515cf7bd3c0759ef6b3f9e1aa62c5a8d01fb4c72b88e"
+CODECS_SHA256="13762f8d19cb5d3301c52b82834fc0f78f70bb5128c1de0d9bbc84b80d8c09b2"
 FRAMEWORK="Chromium Embedded Framework.framework"
 CEF_PATH="${CEF_PATH:-$HOME/.local/share/cef}"
 CODECS_DIR="$HOME/.local/share/cef-codecs"

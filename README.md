@@ -46,12 +46,12 @@ cargo run -p export-cef-dir -- --force $HOME/.local/share/cef
 
 The build reads CEF from `$CEF_PATH`, which defaults to `~/.local/share/cef`. Update the download whenever the pinned `cef` version changes.
 
-That download can't play H.264 video or AAC audio, which X, most news sites and most MP4 files use, because the stock CEF builds leave those patent-encumbered codecs out. To play them, put a CEF framework built with `proprietary_codecs=true` in `~/.local/share/cef-codecs`. The build uses the framework there when present, and the headers from `$CEF_PATH` either way. The [cef-codecs-154.0.34-tabs](https://github.com/sorrycc/Tiller/releases/tag/cef-codecs-154.0.34-tabs) release has such a build of the pinned CEF, made with `scripts/build-cef-codecs.sh` and unsigned. It also has Tiller's patches in `scripts/cef-patches`, without which extensions can't see Tiller's tabs:
+That download can't play H.264 video or AAC audio, which X, most news sites and most MP4 files use, because the stock CEF builds leave those patent-encumbered codecs out. To play them, put a CEF framework built with `proprietary_codecs=true` in `~/.local/share/cef-codecs`. The build uses the framework there when present, and the headers from `$CEF_PATH` either way. The [cef-codecs-154.0.34-tabs.2](https://github.com/sorrycc/Tiller/releases/tag/cef-codecs-154.0.34-tabs.2) release has such a build of the pinned CEF, made with `scripts/build-cef-codecs.sh` and unsigned. It also has Tiller's patches in `scripts/cef-patches`, without which extensions can't see Tiller's tabs and some of their requests fail:
 
 ```sh
 brew install zstd
 mkdir -p ~/.local/share/cef-codecs
-curl -L https://github.com/sorrycc/Tiller/releases/download/cef-codecs-154.0.34-tabs/cef-154.0.34-macosarm64-codecs.tar.zst \
+curl -L https://github.com/sorrycc/Tiller/releases/download/cef-codecs-154.0.34-tabs.2/cef-154.0.34-macosarm64-codecs.tar.zst \
   | tar --use-compress-program=unzstd -x -C ~/.local/share/cef-codecs
 ```
 
