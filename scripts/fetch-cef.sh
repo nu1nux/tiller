@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
 # Downloads CEF as README.md describes: the stock build, whose headers the Rust
-# crates build against, into $CEF_PATH, and the third-party build with H.264
-# and AAC, whose framework goes in the app, into ~/.local/share/cef-codecs.
+# crates build against, into $CEF_PATH, and the build with H.264 and AAC,
+# whose framework goes in the app, into ~/.local/share/cef-codecs.
 # A folder already there is kept when its framework is the version below, and
 # replaced otherwise, so changing a version can't leave the old framework in
 # the app. The release workflow runs this.
 set -euo pipefail
 
-CEF_RS_TAG="cef-v154.2.0+154.0.28"
-CEF_VERSION="154.0.28"
-CODECS_URL="https://github.com/sorrycc/Tiller/releases/download/cef-codecs-154.0.26/cef-154.0.26-macosarm64-codecs.tar.zst"
-CODECS_VERSION="154.0.26"
-# The codecs build is unsigned and made by a third party, aiexkwan/aurix-cef,
-# which no longer publishes it, so a copy lives on this repository's
-# cef-codecs-154.0.26 release: this is the archive that was checked. Change
-# both together. bump.sh checks the URL still works before tagging.
-CODECS_SHA256="ef6dd8cad079bd4b8402134132c699f50575610fa1d553624d17334477e4c3a9"
+CEF_RS_TAG="cef-v154.5.0+154.0.34"
+CEF_VERSION="154.0.34"
+CODECS_URL="https://github.com/sorrycc/Tiller/releases/download/cef-codecs-154.0.34/cef-154.0.34-macosarm64-codecs.tar.zst"
+CODECS_VERSION="154.0.34"
+# The codecs build is unsigned, made with build-cef-codecs.sh and kept on this
+# repository's cef-codecs-154.0.34 release: this is that archive's hash.
+# Change both together. bump.sh checks the URL still works before tagging.
+CODECS_SHA256="1f44d03c7b9a4eca4226871bc06c89d9dbe6a4d7aa09d2fc10f2fd62806afa81"
 FRAMEWORK="Chromium Embedded Framework.framework"
 CEF_PATH="${CEF_PATH:-$HOME/.local/share/cef}"
 CODECS_DIR="$HOME/.local/share/cef-codecs"

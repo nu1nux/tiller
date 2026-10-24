@@ -8,7 +8,7 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-cef = { version = "=154.2.0", default-features = false }
+cef = { version = "=154.5.0", default-features = false }
 
 # Speed over size: the Rust code is under a megabyte next to a Chromium of
 # hundreds, and the core's hot paths (DevTools replies with screenshots in

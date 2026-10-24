@@ -40,22 +40,22 @@ Install the toolchain and download CEF once:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 brew install ninja
 git clone https://github.com/tauri-apps/cef-rs && cd cef-rs
-git checkout cef-v154.2.0+154.0.28
+git checkout cef-v154.5.0+154.0.34
 cargo run -p export-cef-dir -- --force $HOME/.local/share/cef
 ```
 
 The build reads CEF from `$CEF_PATH`, which defaults to `~/.local/share/cef`. Update the download whenever the pinned `cef` version changes.
 
-That download can't play H.264 video or AAC audio, which X, most news sites and most MP4 files use, because the stock CEF builds leave those patent-encumbered codecs out. To play them, put a CEF framework built with `proprietary_codecs=true` in `~/.local/share/cef-codecs`. The build uses the framework there when present, and the headers from `$CEF_PATH` either way. The [cef-codecs-154.0.26](https://github.com/sorrycc/Tiller/releases/tag/cef-codecs-154.0.26) release has such a build for the same Chromium as the pinned CEF, made by a third party (aiexkwan/aurix-cef, which no longer publishes it) and unsigned, so check that it's one you're willing to run:
+That download can't play H.264 video or AAC audio, which X, most news sites and most MP4 files use, because the stock CEF builds leave those patent-encumbered codecs out. To play them, put a CEF framework built with `proprietary_codecs=true` in `~/.local/share/cef-codecs`. The build uses the framework there when present, and the headers from `$CEF_PATH` either way. The [cef-codecs-154.0.34](https://github.com/sorrycc/Tiller/releases/tag/cef-codecs-154.0.34) release has such a build of the pinned CEF, made with `scripts/build-cef-codecs.sh` and unsigned:
 
 ```sh
 brew install zstd
 mkdir -p ~/.local/share/cef-codecs
-curl -L https://github.com/sorrycc/Tiller/releases/download/cef-codecs-154.0.26/cef-154.0.26-macosarm64-codecs.tar.zst \
+curl -L https://github.com/sorrycc/Tiller/releases/download/cef-codecs-154.0.34/cef-154.0.34-macosarm64-codecs.tar.zst \
   | tar --use-compress-program=unzstd -x -C ~/.local/share/cef-codecs
 ```
 
-Or build CEF yourself with `proprietary_codecs=true ffmpeg_branding=Chrome` and copy its framework there. Set `CEF_FRAMEWORK_DIR` to use a framework from another folder. The framework's version must share the pinned CEF's major version and API hash; the script prints the one it picked.
+Or build it yourself with `scripts/build-cef-codecs.sh`, which takes several hours and about 150 GB, and copy its framework there. Set `CEF_FRAMEWORK_DIR` to use a framework from another folder. The framework's version must share the pinned CEF's major version and API hash; the script prints the one it picked.
 
 ## Build and run
 

@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+- Fix a crash when an extension opens a tab as it's added or as Tiller starts.
+
 ## 0.4.3
 
 - The agent's message field is restyled after Codex's, with a rounder card and a plainer send button.
