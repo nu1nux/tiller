@@ -9,360 +9,171 @@ beta shows what `## Unreleased` holds at the time.
 
 ## 0.4.3
 
-- The agent panel's message field is restyled after Codex's: a rounder
-  card with more room around the text, whose edge firms up under the
-  mouse and with focus instead of glowing in the accent, and a send
-  button in the text's color. The thinking effort has a button of its own
-  next to the model, which opens just the efforts, and the hint mentions
-  `/` for skills. The field eases taller and shorter as lines come and go,
-  the send arrow lifts away as a message goes and turns into the stop
-  square while the agent works, and images dragged over the field show a
-  Drop images to attach hint. Reduce Motion turns the motion off.
-- A microphone button beside the send button starts dictation into the
-  agent panel's message field. While the agent works, a short arc circles
-  inside the stop button. The model and effort names, the tools button's
-  tint and the field's hint fade into their new values, and the effort
-  button fades in for a model that has efforts. Reduce Motion turns the
-  motion off.
-- A `/name` at the start of the agent panel's message field that calls a
-  skill shows as a token, in the accent on a soft plate. The skill list
-  rises in from the field and shows what was typed in the accent in each
-  name, and a message taller than the field fades out at the edge with
-  more text beyond it.
-- Type `@` in the agent panel's message field to mention another open
-  tab: pick one from the list, which shows each tab's icon and address,
-  and its address goes in the message.
-- A small ring before the microphone button shows how much of the model's
-  context window the chat takes, once the agent reports it, turning
-  orange from 80% and red from 95%. Its tooltip gives the numbers.
+- The agent's message field is restyled after Codex's, with a rounder card and a plainer send button.
+- The thinking effort has its own button next to the model, and the hint mentions `/` for skills.
+- The message field eases taller and shorter, and the send arrow turns into a stop square while busy.
+- Images dragged over the message field show a Drop images to attach hint.
+- A microphone button beside the send button starts dictation into the message field.
+- A short arc circles inside the stop button while the agent works.
+- The model and effort names, the tools tint and the hint fade into new values; Reduce Motion turns it off.
+- A `/name` that calls a skill shows as a token, and the skill list highlights what was typed.
+- A message taller than the field fades out at the edge with more text beyond it.
+- Type `@` in the message field to mention another open tab by its address.
+- A ring before the microphone shows how full the model's context window is, with the numbers in its tooltip.
 
 ## 0.4.2
 
-- Closing the last tab keeps the window and profile open on the configured
-  new tab page. The closed page can still be reopened with Cmd+Shift+T;
-  closing a window or profile, or quitting Tiller, works as before.
-- Apps that list browsers, such as link pickers, now include Tiller, and
-  a web page handed off from another device opens in Tiller.
-- A file path typed or pasted in the address bar, such as
-  `/Users/me/page.html` or `~/page.html`, opens the file instead of
-  searching for it.
-- Small things ease in instead of popping: the zoom and saved-password
-  badges in the address bar, a tab's recording dot, the agent's status and
-  busy dots, a finished tool call's check, new messages and the Thinking
-  row in a chat, pasted images in the message field, a chat's suggestions,
-  a new download, and a new tab in the sidebar. The page-load bar and the
-  agent button's dot, which were meant to fade, now do. Copy and a finished download's Show in Finder give a
-  small pop. The caret in the address bar and the message field takes the
-  theme's accent. Reduce Motion turns all of it off.
-- In dark mode the address bar's suggestions are no longer a light grey
-  over a dark page: the list takes the theme's own color, with the page
-  showing through a little.
-- The tab sidebar keeps the width it was given when Tiller opens and when
-  it is collapsed and expanded, rather than growing to its widest.
-  Collapsing or expanding it fades its rows into their new shape.
-- Less work while a chat streams and scrolls: the agent's reasoning
-  updates the Thinking row a few times a second rather than on every word,
-  a chat in the background no longer lays itself out, icons and hover
-  colors are made once and reused, and dragging the sidebar's edge saves
-  its width when the drag stops. Typing in the address bar looks through
-  the open tabs once per edit rather than on every key, and `/` in the
-  message field reads your skill folders in the background after the
-  first time.
-- The find bar and the camera and microphone bar drop into place as they
-  fade in, a closed tab fades out while the others close up, and each time
-  the start page comes up its tiles and closed tabs come in one after
-  another.
-- On a narrow page the start page takes fewer columns instead of cutting
-  its tiles and closed tabs off at the left, and a single site's tile sits
-  centered under its heading.
-- The find bar's field is less see-through, so the page's own text no
-  longer shows through it.
-- On a narrow page the find bar and the camera and microphone bar narrow
-  to fit, instead of widening the page and pushing the agent panel aside.
-  At the narrowest the camera bar's buttons take a smaller size.
-- In dark mode the address bar keeps a faint edge at rest, so it still
-  shows where to type when the tabs are along the top.
-- With only one or a few frequently visited sites, the start page's tiles
-  and their heading sit centered on the page again, rather than off to the
-  left with the heading out of line with the tile.
-- Switching to another chat in the agent panel, opening one from history
-  or closing a chat's tab fades the chat that takes the panel in rather
-  than cutting to it; the chat tabs and the message field stay still.
-- The tip beside a profile in the profile rail fades in and out instead of
-  popping, and moving from one profile to the next just changes it.
-- Timers that tick each second while an agent works, and the check for
-  tabs to unload, give the system leeway to batch their wakeups. Agent
-  events that arrive together lay out the chat once rather than once each.
+- Closing the last tab keeps the window open on the new tab page, and `Cmd+Shift+T` still reopens it.
+- Tiller shows up in apps that list browsers, and pages handed off from another device open in it.
+- A file path such as `~/page.html` typed in the address bar opens the file instead of searching.
+- Badges, dots, new messages, downloads and tabs ease in instead of popping; Reduce Motion turns it off.
+- The caret in the address bar and the message field takes the theme's accent.
+- In dark mode the address bar's suggestions take the theme's color instead of a light grey.
+- The tab sidebar keeps its width at launch and when collapsed and expanded.
+- Chats stream and scroll more smoothly, and typing in the address bar does less work.
+- The find bar and the camera bar drop into place, and closed tabs fade out.
+- The start page's tiles and closed tabs come in one after another.
+- On a narrow page the start page takes fewer columns instead of cutting off its tiles.
+- The find bar's field is less see-through, so page text no longer shows through it.
+- On a narrow page the find bar and the camera bar narrow to fit instead of widening the page.
+- In dark mode the address bar keeps a faint edge at rest.
+- With only a few frequent sites, the start page's tiles sit centered under their heading again.
+- Switching chats in the agent panel fades the new chat in rather than cutting to it.
+- A profile's tip in the profile rail fades in and out instead of popping.
+- Tiller wakes the Mac less often while an agent works, saving battery.
 
 ## 0.4.1
 
-- On the start page, recently closed tabs with long titles line up with
-  the others again.
-- The `tiller` command-line tool does what Tiller's menus and Settings do.
-  `tiller profile` lists, opens, creates, renames, colors, labels, moves,
-  closes and deletes profiles, and `--profile` opens a closed profile, or
-  starts Tiller, before it acts. New commands go back and forward, reload,
-  stop, find text, zoom, save a PDF, duplicate, move and reopen tabs, close
-  other tabs, and show the page's source or Developer Tools. `tiller
-  history`, `downloads`, `settings`, `sites`, `passwords`, `extensions` and
-  `import chrome` manage those, `tiller agent send` sends a message to an
-  agent and prints its answer, `tiller skills` and `tiller schedules`
-  manage the skill library and scheduled prompts, and `tiller show` brings
-  up the agent panel, downloads, the find bar or a Settings pane. `tiller
-  <area> --help` lists an area's commands.
-- An agent's chat that runs `tiller` can still use the browser, history
-  search, skills and schedules, but Tiller refuses its requests to manage
-  profiles, settings, logins, extensions and the rest.
-- Agents get six more browser tools: back, forward, reload, finding text in
-  the page, zoom and history search.
+- On the start page, closed tabs with long titles line up with the others again.
+- `tiller profile` lists, opens, creates, renames, colors, moves, closes and deletes profiles.
+- `--profile` opens a closed profile, or starts Tiller, before a `tiller` command acts.
+- `tiller` can go back and forward, reload, find, zoom, save a PDF and manage tabs.
+- `tiller history`, `downloads`, `settings`, `sites`, `passwords` and `extensions` manage those.
+- `tiller import chrome` imports from Chrome.
+- `tiller agent send` sends a message to an agent and prints its answer.
+- `tiller skills` and `tiller schedules` manage the skill library and scheduled prompts.
+- `tiller show` brings up the agent panel, downloads, the find bar or a Settings pane.
+- `tiller <area> --help` lists an area's commands.
+- An agent running `tiller` can't manage profiles, settings, logins or extensions.
+- Agents get browser tools for back, forward, reload, find, zoom and history search.
 
 ## 0.4.0
 
-- Tiller now passes as Chrome to sites that check the browser, such as
-  sign-in pages that said they couldn't verify it. Its user agent no
-  longer adds Tiller's name, and its client hints name Google Chrome as
-  Chrome's do, in every page, frame and worker. A popup's first page may
-  load twice for it.
-- The address bar works more like Chrome's. Typing completes the address
-  of a page you've typed or visited before right in the bar, and the list
-  under it adds the search engine's suggestions, which Settings > General
-  can turn off, and open tabs to switch to. Up and Down put each row in the
-  bar and wrap round, Tab moves through the list too, Shift+Delete or a
-  row's cross removes a page from history, and Ctrl+Return adds `www.` and
-  `.com`. Pages you typed rank higher. Clicking the bar, Cmd+L or Down lists
-  recent pages and a link you copied.
-- At rest the address bar leaves out `https://`, `www.` and a lone trailing
-  slash, which right-click > Always Show Full URLs keeps. Http pages say
-  "Not Secure", and the icon before the address opens the site's
-  information with its camera and microphone permissions. The right-click
-  menu has Paste and Go, and a drag in the bar selects part of the address.
-- On the start page, a recently closed tab with a long address shows its
-  title again; the address is cut short instead of the title.
-- Profile Tabs: View > Profile Tabs, or Settings > Profiles, puts every
-  open profile in one window, with a rail on its left to switch between
-  them. Each square shows two letters of the profile's name, tinted in the
-  profile's color, the one shown ringed and marked by a pill in its color
-  along the rail's edge. Its tip gives the name, the keys that show it,
-  the profile's tab count and the page in front. The dashed `+` opens
-  another profile, a drag reorders them, a link dropped on a square opens
-  in that profile, right-click renames one, picks its color, gives it a
-  label of one or two characters, an emoji too, in place of its initials,
-  or closes it, and with many profiles the rail scrolls.
-  Each profile keeps its own toolbar, tabs and agent panel, and one out of
-  sight keeps running, with a dot that pulses while its agent works and
-  stays once it finishes, until the profile shows. Closing the window
-  closes every profile, and they all open again at the next launch.
-  Turning it on gathers the windows into one, and off parts them again.
-- Each profile has a color, which shows as its avatar in the Profiles
-  menu and beside its name in the toolbar. Profiles without a color of
-  their own pass over the colors others picked, so two don't share one
-  until there are more than eight.
-- Window > Show Next Profile (Ctrl+Cmd+]) and Show Previous Profile
-  (Ctrl+Cmd+[), and Ctrl+Cmd+1 to Ctrl+Cmd+9, go to another open profile.
-- The cross beside a download in the Downloads list cancels it again, and
-  downloads from different profiles no longer get mixed up.
+- Tiller passes as Chrome to sites that check the browser, such as strict sign-in pages.
+- Typing in the address bar completes addresses you've typed or visited before, as Chrome does.
+- Address suggestions include the search engine's, which **Settings > General** can turn off, and open tabs.
+- Up, Down and Tab move through suggestions, and `Shift+Delete` removes a page from history.
+- `Ctrl+Return` in the address bar adds `www.` and `.com`.
+- Clicking the address bar, `Cmd+L` or Down lists recent pages and a copied link.
+- The address bar hides `https://` and `www.`; right-click **> Always Show Full URLs** keeps them.
+- Http pages say "Not Secure", and the site icon opens its camera and microphone permissions.
+- The address bar's right-click menu has Paste and Go.
+- On the start page, a closed tab with a long address shows its title again.
+- **View > Profile Tabs** puts every open profile in one window, with a rail to switch between them.
+- In the profile rail, drag to reorder, drop a link to open it there, and right-click to rename or recolor.
+- A profile out of sight keeps running, with a dot that pulses while its agent works.
+- Each profile has a color, shown as its avatar in the Profiles menu and in the toolbar.
+- `Ctrl+Cmd+]`, `Ctrl+Cmd+[` and `Ctrl+Cmd+1` to `9` switch between open profiles.
+- The cross beside a download cancels it again, and downloads from different profiles stay apart.
 
 ## 0.3.2
 
-- Themes: Settings > General > Theme gives Tiller Claude's colors,
-  Anthropic's ivory or warm near-black with Claude's orange, or Qoder's
-  Forest greens, each light or dark as the appearance is. The window,
-  sidebar, toolbar, agent panel and start page take the theme's colors
-  and accent; Tiller's own theme keeps the system's look.
+- **Settings > General > Theme** adds Claude and Qoder Forest themes, each light or dark.
 
 ## 0.3.1
 
-- Pages can use the camera and microphone. A site asking for them gets a
-  card at the top of the page with Block, Allow Once and Always Allow;
-  saved choices are listed in the new Settings > Sites pane. Tabs that
-  are recording show a red dot on their icon, and when macOS hasn't let
-  Tiller use a device the card says so and opens System Settings.
-- The agent panel says what the agent is doing while it works. The
-  waiting row names the step when it's known, such as thinking, running
-  hooks or compacting the conversation, counts the seconds of a long
-  wait, and now also shows after the agent's text while it writes its
-  next step. Claude Code's and Qoder CLI's file edits and other calls
-  show as soon as the model starts writing them, running calls count
-  their time, and a Codex command shows its latest line of output.
-  Reasoning stays in the transcript as a "Thought for 12s" step with
-  its summary, which a click opens.
+- Pages can use the camera and microphone, after you allow it on a card at the top of the page.
+- **Settings > Sites** lists saved camera and microphone choices.
+- Tabs that are recording show a red dot on their icon.
+- When macOS blocks a device, the card says so and opens System Settings.
+- The agent panel names the step the agent is on, such as thinking or compacting, and counts the seconds.
+- File edits and other tool calls show as soon as the model starts writing them, with running times.
+- A Codex command shows its latest line of output.
+- Reasoning stays in the chat as a "Thought for 12s" step that opens on a click.
 
 ## 0.3.0
 
-- The agent's message field is redesigned: the text spans the field's
-  full width above a row of controls, with the add button, the chat's
-  model by name, the tools and a new round send button that turns into
-  a stop button while a turn runs. The model and tools menus open from
-  the field, above it, and while the agent works the hint says what you
-  write is queued. The new tab button sits right after the tab numbers.
-- Sending a message to the agent no longer asks for the login keychain
-  password to check whether run_task's keys are set; Tiller reads a key
-  only when it uses one, once per launch. Development builds keep their
-  provider and Jev keys apart from the installed Tiller's.
-- While Jev works on a page, the page shows the step it is on, the time so
-  far and a Stop button, and rings each field and button before it acts on
-  it. The agent's chat shows the step under the task, and once it ends
-  whether it got there, with its step count and time, or why it stopped.
-- Settings > Jev says whether agents get `run_task` and what is missing,
-  links to where keys come from, and Check Keys tries both keys and shows
-  how long each model took to answer.
-- Agents hand getting somewhere or setting something up on a page, such
-  as opening a story's comments, filling a search form or setting
-  filters, to TypeSafe's Jev with the new `run_task` tool, or
-  `tiller run "<goal>"`: Jev picks each click, field and option in a few
-  hundred milliseconds instead of a turn per step, and a small text model
-  writes what goes in the fields. Agents get the tool once a TypeSafe
-  key is added in Settings > Jev.
-- Clicks that don't load a page return in about a quarter of a second
-  instead of a second, and `click`, `type` and the new `select` take
-  `read: true` to return the page after acting, saving the agent a step.
-- `read_page` refs stay the same while an element stays on the page and
-  are no longer written into the page, and acting on one whose element
-  has changed fails instead of clicking the wrong thing. It also lists
-  fields by their labels, with their values, checked and expanded state
-  and a dropdown's options, leaves out hidden controls, and takes
-  `viewport` to list only what is on screen.
-- The new `select` tool, and `tiller choose`, pick a dropdown's option.
-  `type` clicks the field before typing, so fields that open suggestions
-  or a search box of their own on a click get the text.
-- The agent's message field remembers what you sent: Up on its first
-  line brings back earlier messages from any chat, Down goes forward
-  again, and Ctrl+R searches them. The paperclip is now a plus button
-  whose menu adds images or opens the search.
-- When Tiller quits unexpectedly right after opening, the next launch
-  starts without extensions and says so, with a link to Extensions
-  settings. An extension that opens a tab as Tiller starts could
-  otherwise crash it at every launch, before it could be switched off.
-- While the agent works through a run of steps, the chat shows only its
-  newest step under the step count instead of a growing list; click the
-  count to see them all. A running script or command gets lines of its
-  own instead of wrapping word by word, a finished step keeps one line,
-  and hovering a step shows its whole input.
+- The agent's message field is redesigned, with the model, tools and a round send button below the text.
+- While the agent works, the message field's hint says what you write is queued.
+- The new tab button sits right after the tab numbers.
+- Sending a message no longer asks for the login keychain password.
+- While Jev works on a page, the page shows its step, the time and a Stop button.
+- The chat shows Jev's current step, and once it ends whether it succeeded or why it stopped.
+- **Settings > Jev** shows whether agents get `run_task`, and Check Keys tests both keys.
+- Agents can hand page tasks, such as filling a form, to Jev with `run_task` or `tiller run "<goal>"`.
+- Clicks that don't load a page return in a quarter of a second instead of a second.
+- `click`, `type` and `select` take `read: true` to return the page after acting.
+- `read_page` refs stay the same while their element does, and fail rather than hit the wrong one.
+- `read_page` lists fields by label with their values, and takes `viewport` to list only what's on screen.
+- The new `select` tool and `tiller choose` pick a dropdown's option.
+- `type` clicks the field before typing, so fields with their own search box get the text.
+- Up and Down in the message field bring back earlier messages, and `Ctrl+R` searches them.
+- The paperclip is now a plus button that adds images or opens the message search.
+- After a crash right at launch, Tiller starts without extensions and says so.
+- A run of agent steps shows only the newest step under a count you can click to see them all.
 
 ## 0.2.2
 
-- `window.open` without a size returns the new tab's window, so a page
-  can open a blank tab and send it somewhere afterwards.
-- With no recently closed tabs below them, the start page's tiles sit
-  centered instead of at the left of an empty row.
-- A page fades in from under the start page, and from the cover a new
-  tab shows in dark mode, instead of cutting in. In dark mode a new page
-  shows as soon as it has nearly loaded, and pages from Back and Forward
-  show sooner.
-- Address suggestions and extension popups fade in and out. Opening a
-  suggestion still closes the list at once.
-- The tab sidebar can no longer be dragged so narrow that tabs lose their
-  titles while it is still expanded.
-- Tooltips on tabs, the new-tab row, suggestions and downloads no longer
-  stop showing after the mouse has moved over them.
-- Middle-clicking closes a tab only when the click both starts and ends
-  on that tab.
-- The address bar, favicons, the downloads button and window resizing do
-  less repeated work.
-- Resizing the window or the agent panel only rewraps the chat messages
-  in view, and catches up on the rest when the drag ends. A code block
-  streaming in measures only its new lines, and opening a saved chat no
-  longer starts and stops a spinner for each step.
-- In agents' answers, nested lists indent one level per level however
-  many spaces they use, a list item's wrapped lines line up with its
-  text, and numbered and bulleted items' text starts at the same place.
-  Task lists show checkboxes instead of brackets, with finished tasks
-  dimmed, and links in quotes keep their color.
-- Tables have the same corners as code blocks, the empty chat's
-  suggestions line up their text, and an error's Try Again button
-  matches the panel's other buttons.
-- In Settings → General, "Unload after" and "Custom search URL" dim
-  their labels too when the setting they depend on is off, and the note
-  under the search URL says to pick Custom to use it.
-- Agent tool results, stderr from an agent's CLI, replies to the `tiller`
-  tool and download progress do less work on the main thread.
-- Start page tiles no longer rebuild and fade in again when a page title
-  or icon changes; a tile updates in place. Very small site icons are
-  no longer stretched to full size, and the background grain is
-  drawn at full resolution on Retina screens.
-- Clear History also removes the cleared pages from the history file
-  itself, rather than leaving them in its journal and free space.
-- Saving open tabs no longer writes on the main thread after every tab
-  change, and the session file is private from the moment it is written.
-  Saved passwords load in the background as a profile opens.
-- Opening another tab of a site no longer rewrites its icon to history,
-  and history queries reuse their prepared statements.
-- Back and forward mouse side buttons work with Logi Options+ too, which
-  sends swipe gestures instead of standard mouse button events on macOS.
+- `window.open` without a size returns the new tab's window.
+- With no closed tabs below them, the start page's tiles sit centered.
+- A page fades in from under the start page instead of cutting in.
+- In dark mode new pages and pages from Back and Forward show sooner.
+- Address suggestions and extension popups fade in and out.
+- The tab sidebar can't be dragged so narrow that tabs lose their titles.
+- Tooltips on tabs, suggestions and downloads keep showing after the mouse has moved over them.
+- Middle-clicking closes a tab only when the click starts and ends on it.
+- Resizing the window or the agent panel is smoother with long chats.
+- In agents' answers, nested and numbered lists indent and line up properly.
+- Task lists in agents' answers show checkboxes, and links in quotes keep their color.
+- Tables, chat suggestions and the Try Again button match the panel's style.
+- In **Settings → General**, labels dim when the setting they depend on is off.
+- Agents and downloads do less work on the main thread, keeping the window responsive.
+- Start page tiles update in place, and small site icons are no longer stretched.
+- Clear History also removes the pages from the history file itself.
+- The session file is private from the moment it's written.
+- Back and forward mouse buttons work with Logi Options+.
 
 ## 0.2.1
 
-- The agent chat fades out under its header and above the message field
-  as it scrolls, instead of cutting a line in half at the edge.
-- The start page's tiles line up from the left when there are fewer than
-  four, rather than spreading out with gaps between them.
-- Address suggestions line up their icons and titles with the address
-  field's icon and text.
-- Small polish: Copy and download buttons light up under the mouse, a
-  tab's close button and the skill picker fade in, steps fold away with a
-  fade when a turn ends, queued messages show a press, the find bar's
-  close button has a round plate, chat history dates are easier to read,
-  and Remote debugging moves to the end of Settings → General.
-- Chats in background tabs or a hidden panel no longer redraw streamed
-  text 20 times a second; they catch up when shown.
-- Scrolling a long tab sidebar only moves the tabs in view, and resizing
-  the window lays out the toolbar once, when the drag ends.
-- The Downloads list no longer updates while closed, and the first
-  message to an agent no longer freezes the window while a login shell
-  looks for its command.
-- Importing a long Chrome history no longer holds up the address bar's
-  suggestions and the start page until it finishes.
+- The agent chat fades out at its top and bottom edges as it scrolls.
+- The start page's tiles line up from the left when there are fewer than four.
+- Address suggestions line up their icons and titles with the address field.
+- Buttons light up under the mouse, and the skill picker and finished steps fade.
+- Remote debugging moves to the end of **Settings → General**.
+- Chats in background tabs no longer redraw streamed text until shown.
+- Long tab sidebars scroll and the window resizes more smoothly.
+- The first message to an agent no longer freezes the window.
+- Importing a long Chrome history no longer holds up address suggestions and the start page.
 
 ## 0.2.0
 
-- Background tabs left unused for 30 minutes unload to free their memory,
-  and sooner when the Mac runs low on memory. An unloaded tab keeps its
-  place, shows a dimmed title and icon, and loads again when selected.
-  Tabs playing media, using the camera or microphone, or asking before
-  you leave stay loaded. Settings → General turns it off or sets the delay.
-- Agents and the `tiller` tool no longer load every tab restored at launch.
-  They load only the tab they act on, and `list_tabs` says whether each
-  tab is loaded. Tab ids stay the same while a tab is unloaded.
-- Fixed a crash in the agent chat with a mouse attached, when a
-  conversation grew to about one screen tall.
-- Back and forward mouse side buttons now navigate the selected tab,
-  including Logitech mice with standard button assignments.
+- Background tabs unused for 30 minutes unload to free memory, and reload when selected.
+- Tabs playing media, recording or asking before you leave stay loaded.
+- **Settings → General** turns tab unloading off or sets the delay.
+- Agents and `tiller` load only the tab they act on, and `list_tabs` says which tabs are loaded.
+- Fix a crash in the agent chat with a mouse attached once a chat grew about a screen tall.
+- Back and forward mouse buttons navigate the selected tab.
 
 ## 0.1.5
 
-- Settings → Providers takes Codex too, so Codex can run on a provider you
-  added, such as a relay's Responses API, without a Codex login or any
-  change to `~/.codex`.
-- A setting lets chrome-use and other tools drive Tiller over the Chrome
-  DevTools Protocol on port 9222. It is off by default, as it exposes every
-  profile's sign-ins to local processes, and takes effect on the next
-  launch.
-- Opening an extension's popup from the toolbar no longer crashes Tiller,
-  and popups such as Bitwarden's no longer collapse to a narrow strip.
-- The tabs, or the address bar with the tabs in the sidebar, fit the
-  toolbar on every macOS version, without a wide gap before the trailing
-  buttons or pushing them into the overflow menu.
-- The address bar keeps a faint fill in light mode, long agent answers
-  stream more smoothly, and the start page's tiles stay centered under
-  their heading.
+- **Settings → Providers** lets Codex run on a provider you added, without a Codex login.
+- A setting lets chrome-use and other tools drive Tiller over CDP on port 9222.
+- Fix a crash on opening an extension's popup, and popups no longer collapse to a narrow strip.
+- The tabs and address bar fit the toolbar on every macOS version.
+- The address bar keeps a faint fill in light mode, and long answers stream more smoothly.
 
 ## 0.1.4
 
-- **Run commands** lifts Codex's sandbox, so its shell can write anywhere
-  and reach the network, as Claude Code's Bash does. Allowing only writing
-  keeps it to the workspace.
+- **Run commands** lifts Codex's sandbox, so its shell can write anywhere and reach the network.
 
 ## 0.1.3
 
-- Fixes profiles that Chromium refused or that raced each other to create
-  the same databases at startup.
+- Fix profiles that failed to open at startup.
 
 ## 0.1.2
 
-- Tiller runs on macOS 14 and later. Before macOS 26, glass falls back to
-  a tinted blur.
-- While the agent thinks, a bobbing boat and a sailing phrase replace the
-  spinner, and hold still when the system asks for less motion.
+- Tiller runs on macOS 14 and later, with a tinted blur in place of glass before macOS 26.
+- While the agent thinks, a bobbing boat and a sailing phrase replace the spinner.
 - Agent responses have a Copy button and show when they came.
 - View Source opens in a tab after the current one, as in Chrome.
 
