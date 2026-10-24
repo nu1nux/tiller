@@ -282,7 +282,7 @@ final class ExtensionStore {
 
     private init() {
         let data = try? Data(contentsOf: URL(fileURLWithPath: path))
-        entries = data.flatMap { try? JSONDecoder().decode([Entry].self, from: $0) } ?? []
+        entries = Self.adoptWebStoreInstalls(into: data.flatMap { try? JSONDecoder().decode([Entry].self, from: $0) } ?? [])
         var loaded: [ExtensionManifest] = []
         for entry in entries where entry.enabled && !entry.path.contains(",") {
             guard let manifest = try? ExtensionManifest.read(entry.path) else { continue }
@@ -514,6 +514,43 @@ final class ExtensionStore {
         "\(target)/\(id)_\(UUID().uuidString.prefix(8).lowercased())"
     }
 
+    /// Takes over extensions installed from the Chrome Web Store page, which
+    /// Chromium puts in the one profile they were installed from: they are
+    /// copied into `Extensions` like a CRX file and taken out of that
+    /// profile, so they load into every profile and show in Settings. Runs
+    /// before Chromium starts, since it writes its preferences back as it
+    /// quits. An extension already added keeps its entry; a copy it made
+    /// itself is replaced by the newer one.
+    private static func adoptWebStoreInstalls(into entries: [Entry]) -> [Entry] {
+        var entries = entries
+        var changed = false
+        let profiles = (try? FileManager.default.contentsOfDirectory(atPath: Profiles.chromiumRoot)) ?? []
+        for name in profiles {
+            let profile = Profiles.chromiumRoot + "/" + name
+            var adopted: [String] = []
+            for install in WebStoreInstalls.find(in: profile) {
+                guard let folder = try? copy(install.folder, into: Self.folder, id: install.id) else { continue }
+                guard let manifest = try? ExtensionManifest.read(folder) else {
+                    removeLater([folder])
+                    continue
+                }
+                adopted.append(install.id)
+                if let index = entries.firstIndex(where: { (try? ExtensionManifest.read($0.path))?.id == manifest.id }) {
+                    // The folder left out is deleted with the unused ones.
+                    guard entries[index].source.owned else { continue }
+                    entries[index].path = folder
+                    entries[index].source = .crx
+                } else {
+                    entries.append(Entry(path: folder, source: .crx, enabled: install.enabled, pinned: false))
+                }
+                changed = true
+            }
+            WebStoreInstalls.forget(adopted, in: profile)
+        }
+        if changed { write(entries) }
+        return entries
+    }
+
     /// Folders under `Extensions` that no entry uses any more, such as ones
     /// removed while they were loaded.
     private func unusedFolders() -> [String] {
@@ -523,15 +560,90 @@ final class ExtensionStore {
     }
 
     private func save() {
+        Self.write(entries)
+        NotificationCenter.default.post(name: .extensionsDidChange, object: nil)
+    }
+
+    private static func write(_ entries: [Entry]) {
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(entries).write(to: URL(fileURLWithPath: path), options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+            try encoder.encode(entries).write(to: URL(fileURLWithPath: listPath), options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: listPath)
         } catch {
             NSLog("Tiller: could not save extensions: %@", error.localizedDescription)
         }
-        NotificationCenter.default.post(name: .extensionsDidChange, object: nil)
+    }
+}
+
+/// Extensions Chromium installed into one of its profiles itself, from the
+/// Chrome Web Store page, which `ExtensionStore` takes over at launch.
+enum WebStoreInstalls {
+    struct Install {
+        let id: String
+        /// The version's folder, with manifest.json in it.
+        let folder: String
+        let enabled: Bool
+    }
+
+    private static let files = ["Preferences", "Secure Preferences"]
+
+    /// The extensions at Chromium's location 1, installed from the Web Store,
+    /// leaving out those Chromium installs by default.
+    static func find(in profile: String) -> [Install] {
+        var settings: [String: [String: Any]] = [:]
+        for name in files {
+            guard let data = FileManager.default.contents(atPath: profile + "/" + name),
+                let prefs = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let found = (prefs["extensions"] as? [String: Any])?["settings"] as? [String: [String: Any]]
+            else { continue }
+            settings.merge(found) { $1 }
+        }
+        return settings.sorted { $0.key < $1.key }.compactMap { id, setting in
+            guard setting["location"] as? Int == 1, setting["was_installed_by_default"] as? Bool != true,
+                let path = setting["path"] as? String, !path.hasPrefix("/")
+            else { return nil }
+            let folder = profile + "/Extensions/" + path
+            guard FileManager.default.fileExists(atPath: folder + "/manifest.json") else { return nil }
+            let reasons = setting["disable_reasons"]
+            let disabled = (reasons as? [Any]).map { !$0.isEmpty } ?? ((reasons as? Int ?? 0) != 0)
+                || (setting["state"] as? Int) == 0
+            return Install(id: id, folder: folder, enabled: !disabled)
+        }
+    }
+
+    /// Takes the extensions out of the profile's preferences, with the
+    /// checksums Chromium keeps of them, and deletes Chromium's copies. What
+    /// they stored stays, for Tiller's copy, which has the same id.
+    static func forget(_ ids: [String], in profile: String) {
+        guard !ids.isEmpty else { return }
+        for name in files {
+            let path = profile + "/" + name
+            guard let data = FileManager.default.contents(atPath: path),
+                var prefs = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { continue }
+            let removed = removing(ids, at: ["extensions", "settings"], in: &prefs)
+            let unchecked = removing(ids, at: ["protection", "macs", "extensions", "settings"], in: &prefs)
+            guard removed || unchecked, let updated = try? JSONSerialization.data(withJSONObject: prefs) else { continue }
+            try? updated.write(to: URL(fileURLWithPath: path), options: .atomic)
+        }
+        for id in ids {
+            try? FileManager.default.removeItem(atPath: profile + "/Extensions/" + id)
+        }
+    }
+
+    /// Removes the keys `ids` from the dictionary at `keys`. Returns whether
+    /// any were there.
+    private static func removing(_ ids: [String], at keys: [String], in dictionary: inout [String: Any]) -> Bool {
+        guard let key = keys.first, var child = dictionary[key] as? [String: Any] else { return false }
+        var removed = false
+        if keys.count == 1 {
+            for id in ids where child.removeValue(forKey: id) != nil { removed = true }
+        } else {
+            removed = removing(ids, at: Array(keys.dropFirst()), in: &child)
+        }
+        if removed { dictionary[key] = child }
+        return removed
     }
 }
 

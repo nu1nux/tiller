@@ -70,7 +70,7 @@ Tiller keeps its data in `~/Library/Application Support/Tiller`. Set `TILLER_DAT
 | `Profiles/<id>/agent-skills/` | The [skill library](agent.md#tillers-skill-library): `skills.json` lists each skill's name, where it came from (a folder, an archive, Git or an agent) and whether it's on; `library/` holds the skills and `exposed/` links the ones that are on |
 | `Profiles/<id>/agent-schedules.json` | The [scheduled prompts](agent.md#scheduled-prompts): each one's name, prompt, agent, tools, model options, rule, whether it's on, its next run, and its last run with how it went and its chat |
 | `extensions.json` | The extensions: each one's folder, where it came from (a folder, a CRX file or Chrome), and whether it's on and pinned |
-| `Extensions/` | Extensions Tiller unpacked or copied, one folder each, named by id plus a random suffix so an update never overwrites files Chromium has loaded. Folders nothing uses any more are deleted at launch |
+| `Extensions/` | Extensions Tiller unpacked or copied, Chrome Web Store installs included, one folder each, named by id plus a random suffix so an update never overwrites files Chromium has loaded. Folders nothing uses any more are deleted at launch |
 
 Unix socket paths are limited to 104 bytes, so for a long folder path set `TILLER_SOCKET` to a shorter socket path. The app and `tiller_mcp` both read it. It applies to the first profile Tiller opens only, since two profiles can't share a socket.
 

@@ -17,7 +17,7 @@ https://github.com/user-attachments/assets/1960eca0-6cb0-460b-bb6f-b292b739a147
 - **The usual browser things.** Find in page, zoom, print, a link's address under the mouse, pages going full screen, Chromium's developer tools and view source, and the camera and microphone for video calls, asked about per site.
 - **Downloads.** Files go to `~/Downloads`, with progress in the toolbar.
 - **Import from Chrome.** Cookies, saved passwords, history, extensions, search engine and homepage.
-- **Chrome extensions.** Add unpacked folders or CRX files, or bring Chrome's over. Content scripts, background workers and popups run; Chrome's tab and window APIs don't see Tiller's tabs.
+- **Chrome extensions.** Add unpacked folders or CRX files, install from the Chrome Web Store, or bring Chrome's over. Content scripts, background workers and popups run; Chrome's tab and window APIs don't see Tiller's tabs.
 - **Profiles.** Each profile has its own site data, history, passwords, settings and chats, in a window of its own, or with Profile Tabs every profile in one window, switched from a rail on its left.
 - **Agent panel.** Chat with Qoder CLI, Claude Code, Codex, Antigravity CLI or Grok Build in a side panel that controls the browser, and call skills with `/`, from your own folders or a skill library each agent shares. Prompts can also run on a schedule, skills included, set up in Settings or by asking the agent.
 - **Browser tools.** A stdio MCP server and the `tiller` command-line tool expose the same tools to external agents and scripts.

@@ -93,3 +93,18 @@ pub fn install() -> bool {
     let _ = TillerApplication::shared_application();
     NSApp(mtm).isKindOfClass(TillerApplication::class())
 }
+
+/// Takes the window holding `view`, a browser's `NSView`, off the screen.
+pub fn hide_window_of(view: *mut std::ffi::c_void) {
+    if view.is_null() {
+        return;
+    }
+    let view = view.cast::<AnyObject>();
+    // SAFETY: CEF hands out the browser's live NSView, on the main thread.
+    unsafe {
+        let window: *mut AnyObject = msg_send![view, window];
+        if !window.is_null() {
+            let _: () = msg_send![window, orderOut: std::ptr::null::<AnyObject>()];
+        }
+    }
+}

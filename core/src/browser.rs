@@ -149,6 +149,10 @@ thread_local! {
     /// The tab `popup_tab` made for a `window.open` that CEF is about to
     /// create, taken by `on_after_created`.
     static PENDING_POPUP: RefCell<Option<PendingPopup>> = const { RefCell::new(None) };
+    /// Tabs Chromium opened in a Chrome window of its own, such as an
+    /// extension's install page, until their address is known and they move
+    /// to a Tiller tab (`move_stray`).
+    static STRAYS: RefCell<HashMap<i32, Browser>> = RefCell::new(HashMap::new());
     static DEVTOOLS_CALLS: RefCell<HashMap<i32, PendingCall>> = RefCell::new(HashMap::new());
     /// Camera and microphone requests the app hasn't answered, by the id it
     /// answers them with.
@@ -900,6 +904,69 @@ fn open_in_tab(browser: Option<&mut Browser>, url: Option<&CefString>, backgroun
     }
 }
 
+/// Opens stray tab `id`'s page in a Tiller tab of its profile and closes the
+/// stray, which closes Chromium's window with its last tab. Waits while the
+/// address isn't known yet, and leaves the window be when no Tiller tab is
+/// open to put the page next to.
+fn move_stray(id: i32) {
+    let Some(stray) = STRAYS.with_borrow(|map| map.get(&id).cloned()) else { return };
+    let Some(host) = stray.host() else { return };
+    // The tab's first page is still pending, so ask for the entry it shows.
+    let url = host
+        .visible_navigation_entry()
+        .map(|e| CefString::from(&e.url()).to_string())
+        .filter(|u| !u.is_empty())
+        .or_else(|| stray.main_frame().map(|f| CefString::from(&f.url()).to_string()))
+        .unwrap_or_default();
+    if url.is_empty() {
+        return;
+    }
+    if url.starts_with("devtools://") {
+        STRAYS.with_borrow_mut(|map| map.remove(&id));
+        return;
+    }
+    // Chrome's New Tab page is Tiller's start page.
+    let url = if url.starts_with("chrome://newtab") || url.starts_with("chrome://new-tab-page") { "about:blank" } else { &url };
+    let context = context_of(&stray);
+    let callbacks = BROWSERS.with_borrow(|map| {
+        let mut entries = map.values().filter(|e| e.callbacks.is_some_and(|cb| cb.open_tab.is_some()));
+        let same = entries.clone().find(|e| e.context == context);
+        same.or_else(|| entries.next()).and_then(|e| e.callbacks)
+    });
+    let Some(cb) = callbacks else { return };
+    STRAYS.with_borrow_mut(|map| map.remove(&id));
+    crate::app_mac::hide_window_of(host.window_handle());
+    if let Some(f) = cb.open_tab {
+        let url = CString::new(url).unwrap_or_default();
+        unsafe { f(cb.ctx, url.as_ptr(), false) };
+    }
+    host.close_browser(1);
+}
+
+wrap_task! {
+    struct MoveStrayTask {
+        id: i32,
+    }
+
+    impl Task {
+        fn execute(&self) {
+            move_stray(self.id);
+        }
+    }
+}
+
+wrap_browser_process_handler! {
+    struct TillerBrowserProcessHandler;
+
+    impl BrowserProcessHandler {
+        /// The client of browsers Chromium creates itself, such as a tab an
+        /// extension opens, so `on_after_created` can move them to Tiller.
+        fn default_client(&self) -> Option<Client> {
+            Some(TillerClient::new())
+        }
+    }
+}
+
 wrap_request_handler! {
     struct TillerRequestHandler;
 
@@ -1054,6 +1121,10 @@ wrap_display_handler! {
                 return;
             }
             let Some(browser) = browser else { return };
+            if STRAYS.with_borrow(|map| map.contains_key(&browser.identifier())) {
+                move_stray(browser.identifier());
+                return;
+            }
             // A source page reports the address it shows the source of, so
             // take the entry's view-source: address instead.
             let source = browser
@@ -1400,6 +1471,16 @@ wrap_life_span_handler! {
                 }
                 return;
             }
+            // Tiller's own browsers are Alloy style, so a Chrome-style one
+            // is a tab Chromium opened in a Chrome window, which moves to a
+            // Tiller tab once Chromium has finished adding it.
+            if browser.host().is_some_and(|h| h.runtime_style() == RuntimeStyle::CHROME) {
+                let id = browser.identifier();
+                STRAYS.with_borrow_mut(|map| map.insert(id, browser.clone()));
+                let mut task = MoveStrayTask::new(id);
+                post_task(ThreadId::UI, Some(&mut task));
+                return;
+            }
             if browser.is_popup() != 0 {
                 let id = browser.identifier();
                 POPUPS.with_borrow_mut(|map| map.insert(id, browser.clone()));
@@ -1442,6 +1523,9 @@ wrap_life_span_handler! {
             let Some(browser) = browser else { return };
             let id = browser.identifier();
             FIRST_LOADS.with_borrow_mut(|map| map.remove(&id));
+            if STRAYS.with_borrow_mut(|map| map.remove(&id)).is_some() {
+                return;
+            }
             if POPUPS.with_borrow_mut(|map| map.remove(&id)).is_some() {
                 // Released outside the borrow, as a tab's below.
                 let registration = POPUP_DEVTOOLS.with_borrow_mut(|map| map.remove(&id));
@@ -1498,6 +1582,10 @@ wrap_app! {
     pub struct TillerApp;
 
     impl App {
+        fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
+            Some(TillerBrowserProcessHandler::new())
+        }
+
         fn on_before_command_line_processing(&self, process_type: Option<&CefString>, command_line: Option<&mut CommandLine>) {
             let is_browser = process_type.is_none_or(|t| t.to_string().is_empty());
             if let (true, Some(cmd)) = (is_browser, command_line) {

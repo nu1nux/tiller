@@ -8,6 +8,8 @@ beta shows what `## Unreleased` holds at the time.
 ## Unreleased
 
 - Fix a crash when an extension opens a tab as it's added or as Tiller starts.
+- Pages an extension opens, such as its options or welcome page, open in a Tiller tab, not a Chromium window.
+- Extensions added from the Chrome Web Store join **Settings > Extensions** and every profile at the next launch.
 
 ## 0.4.3
 
