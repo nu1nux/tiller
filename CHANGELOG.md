@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+- **Settings > Scheduled** can stop a scheduled prompt's run while it works, or show its chat.
+- Removing a scheduled prompt in **Settings > Scheduled** now also stops its run in progress.
 - Tab layout, the tab sidebar's width and collapsed state, and tab unloading are the same in every profile.
 - Settings in **Settings > Agent** and **Settings > Jev** now apply to every profile.
 - Custom providers in **Settings > Providers** and skills in **Settings > Skills** are shared by every profile.

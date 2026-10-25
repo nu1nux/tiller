@@ -1261,6 +1261,11 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
         agentPanel.isChatBusy(id)
     }
 
+    /// Stops the chat's turn, in a tab or in the background.
+    func stopAgentChat(_ id: String) {
+        _ = agentPanel.stopChat(id)
+    }
+
     /// Brings the window forward with the panel showing the chat, for a
     /// scheduled run's notification.
     func showAgentChat(_ id: String) {

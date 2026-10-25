@@ -3,7 +3,7 @@ import AppKit
 // MARK: Scheduled pane
 
 /// Settings > Scheduled: the profile's scheduled prompts, with buttons to
-/// add, edit, run and remove them.
+/// add, edit, run, stop and remove them.
 final class ScheduledSettingsPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSMenuItemValidation {
     static let paneTitle = "Scheduled"
 
@@ -11,6 +11,7 @@ final class ScheduledSettingsPane: NSViewController, NSTableViewDataSource, NSTa
     private let addButton = NSButton(title: "Add…", target: nil, action: nil)
     private let editButton = NSButton(title: "Edit…", target: nil, action: nil)
     private let runButton = NSButton(title: "Run Now", target: nil, action: nil)
+    private let showButton = NSButton(title: "Show Chat", target: nil, action: nil)
     private let removeButton = NSButton(title: "Remove", target: nil, action: nil)
     private let note = SettingsPane.wrappingNote(width: SettingsPane.tableWidth)
     private var placeholder: NSTextField?
@@ -64,12 +65,13 @@ final class ScheduledSettingsPane: NSViewController, NSTableViewDataSource, NSTa
             (addButton, #selector(add(_:))),
             (editButton, #selector(edit(_:))),
             (runButton, #selector(runNow(_:))),
+            (showButton, #selector(showChat(_:))),
             (removeButton, #selector(remove(_:))),
         ] {
             button.target = self
             button.action = action
         }
-        let buttons = NSStackView(views: [addButton, editButton, NSView(), runButton, removeButton])
+        let buttons = NSStackView(views: [addButton, editButton, NSView(), showButton, runButton, removeButton])
         buttons.spacing = 8
 
         let stack = NSStackView(views: [tableBox, buttons, note])
@@ -108,8 +110,12 @@ final class ScheduledSettingsPane: NSViewController, NSTableViewDataSource, NSTa
 
     private func updateControls() {
         let count = table.selectedRowIndexes.count
+        let working = selectedRunning
         editButton.isEnabled = count == 1
+        // Run Now turns into Stop while the selected prompt's run works.
+        runButton.title = working ? "Stop" : "Run Now"
         runButton.isEnabled = count == 1
+        showButton.isHidden = !working
         removeButton.isEnabled = count > 0
         placeholder?.isHidden = !schedules.isEmpty
     }
@@ -217,12 +223,32 @@ final class ScheduledSettingsPane: NSViewController, NSTableViewDataSource, NSTa
     }
     #endif
 
-    @objc private func runNow(_ sender: Any?) {
-        guard table.selectedRowIndexes.count == 1, schedules.indices.contains(table.selectedRow) else { return }
-        profile.scheduler.runNow(schedules[table.selectedRow].id)
+    /// The one selected schedule.
+    private var selectedSchedule: ScheduledPrompt? {
+        guard table.selectedRowIndexes.count == 1, schedules.indices.contains(table.selectedRow) else { return nil }
+        return schedules[table.selectedRow]
     }
 
-    /// Asks first. Chats from earlier runs stay in history.
+    private var selectedRunning: Bool {
+        selectedSchedule.map { profile.scheduler.runningChat($0.id) != nil } ?? false
+    }
+
+    /// Run Now, or Stop while the run is working.
+    @objc private func runNow(_ sender: Any?) {
+        guard let schedule = selectedSchedule else { return }
+        if selectedRunning {
+            profile.scheduler.stopRun(schedule.id)
+        } else {
+            profile.scheduler.runNow(schedule.id)
+        }
+    }
+
+    @objc private func showChat(_ sender: Any?) {
+        guard let schedule = selectedSchedule else { return }
+        profile.scheduler.showRun(schedule.id)
+    }
+
+    /// Asks first. A run still working stops; chats from earlier runs stay in history.
     @objc private func remove(_ sender: Any?) {
         let indexes = table.selectedRowIndexes
         let picked = indexes.compactMap { schedules.indices.contains($0) ? schedules[$0] : nil }
@@ -237,6 +263,7 @@ final class ScheduledSettingsPane: NSViewController, NSTableViewDataSource, NSTa
             guard response == .alertFirstButtonReturn else { return }
             MainActor.assumeIsolated {
                 guard let self else { return }
+                picked.forEach { self.profile.scheduler.stopRun($0.id) }
                 self.store.remove(Set(picked.map(\.id)))
                 self.table.deselectAll(nil)
             }

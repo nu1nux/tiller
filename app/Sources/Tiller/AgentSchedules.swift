@@ -434,6 +434,24 @@ final class AgentScheduler: NSObject {
         run(schedule)
     }
 
+    /// The chat of `id`'s run while it is still working.
+    func runningChat(_ id: String) -> String? {
+        guard let chat = running[id], browser?.isAgentChatBusy(chat) == true else { return nil }
+        return chat
+    }
+
+    /// Stops `id`'s run if it is working. Its result becomes Stopped.
+    func stopRun(_ id: String) {
+        guard let chat = runningChat(id) else { return }
+        browser?.stopAgentChat(chat)
+    }
+
+    /// Shows `id`'s working run in the agent panel.
+    func showRun(_ id: String) {
+        guard let chat = runningChat(id) else { return }
+        browser?.showAgentChat(chat)
+    }
+
     private func run(_ schedule: ScheduledPrompt) {
         let now = Date()
         guard let browser else {
