@@ -11,6 +11,7 @@ beta shows what `## Unreleased` holds at the time.
 - Settings in **Settings > Agent** and **Settings > Jev** now apply to every profile.
 - Custom providers in **Settings > Providers** and skills in **Settings > Skills** are shared by every profile.
 - Existing settings come from the default profile, and skills from all profiles are merged into one library.
+- Switching profiles no longer shows the last profile's tabs through the sidebar while its agent works.
 
 ## 0.5.0
 

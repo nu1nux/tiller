@@ -63,9 +63,19 @@ final class TabSidebarView: NSView {
 }
 
 /// A split view whose dividers can go unseen, for panes that share a surface.
+/// It fills itself with the window's chrome, so a hidden profile an agent
+/// keeps drawing underneath doesn't show through the sidebar.
 final class ChromeSplitView: NSSplitView {
     var hidesDividers = false {
         didSet { needsDisplay = true }
+    }
+
+    override var isOpaque: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        Theme.chrome.setFill()
+        dirtyRect.fill()
+        super.draw(dirtyRect)
     }
 
     override var dividerColor: NSColor {
