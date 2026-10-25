@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+- Profile Tabs' rail shows its profiles again, instead of a blank strip at the window's left.
+
 ## 0.5.1
 
 - **Settings > Scheduled** can stop a scheduled prompt's run while it works, or show its chat.
