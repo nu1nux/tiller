@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+## 0.5.2
+
 - Profile Tabs' rail shows its profiles again, instead of a blank strip at the window's left.
 
 ## 0.5.1
