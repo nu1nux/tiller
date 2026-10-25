@@ -43,7 +43,9 @@ final class ProfileContext {
     let history: HistoryStore
     let passwords: PasswordStore
     let agentHistory: AgentHistoryStore
+    /// Shared by every profile.
     let providers: AgentProviderStore
+    /// Shared by every profile.
     let skills: AgentSkillStore
     let schedules: AgentScheduleStore
     private(set) lazy var scheduler = AgentScheduler(profile: self)
@@ -80,8 +82,8 @@ final class ProfileContext {
         history = HistoryStore(path: folder + "/history.sqlite")
         passwords = PasswordStore(profileID: id, folder: folder)
         agentHistory = AgentHistoryStore(folder: folder)
-        providers = AgentProviderStore(settings: settings)
-        skills = AgentSkillStore(folder: folder, settings: settings)
+        providers = .shared
+        skills = .shared
         schedules = AgentScheduleStore(folder: folder)
     }
 

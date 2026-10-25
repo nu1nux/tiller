@@ -135,18 +135,18 @@ struct AgentProvider: Codable, Equatable {
     }
 }
 
-/// The profile's providers, in its defaults.
+/// The providers, in the app's defaults, which every profile shares.
 @MainActor
 final class AgentProviderStore {
+    static let shared = AgentProviderStore()
+
     private static let defaultsKey = "agentProviders"
     private(set) var providers: [AgentProvider]
-    let settings: ProfileSettings
-    /// Greys out unavailable agents in this profile's agent pop-ups.
+    /// Greys out unavailable agents in the agent pop-ups.
     private(set) lazy var menuAvailability = AgentMenuAvailability(providers: self)
 
-    init(settings: ProfileSettings) {
-        self.settings = settings
-        providers = settings.defaults.data(forKey: Self.defaultsKey)
+    private init() {
+        providers = Settings.defaults.data(forKey: Self.defaultsKey)
             .flatMap { try? JSONDecoder().decode([AgentProvider].self, from: $0) } ?? []
     }
 
@@ -173,7 +173,7 @@ final class AgentProviderStore {
     }
 
     private func write() {
-        settings.defaults.set(try? JSONEncoder().encode(providers), forKey: Self.defaultsKey)
+        Settings.defaults.set(try? JSONEncoder().encode(providers), forKey: Self.defaultsKey)
         NotificationCenter.default.post(name: .agentProvidersDidChange, object: self)
     }
 
@@ -198,8 +198,8 @@ final class AgentProviderStore {
     /// while the CLI is still being looked up.
     func unavailableReason(_ choice: AgentChoice) -> String? {
         let kind = choice.kind
-        guard AgentEnvironment.isAvailable(kind, settings: settings) == false else { return nil }
-        if let path = settings.agentPath(for: kind) {
+        guard AgentEnvironment.isAvailable(kind) == false else { return nil }
+        if let path = Settings.agentPath(for: kind) {
             return "\(path) is not an executable file. Fix the \(kind.displayName) path in Settings (Cmd+,)."
         }
         return "\(kind.rawValue) not found. Install it, or set its path in Settings (Cmd+,)."
@@ -213,12 +213,12 @@ final class AgentProviderStore {
     /// What new chats start with. A removed provider falls back to its CLI.
     var current: AgentChoice {
         get {
-            guard let choice = settings.defaults.string(forKey: "agent").flatMap(AgentChoice.init) else { return AgentChoice(.qodercli) }
+            guard let choice = Settings.defaults.string(forKey: "agent").flatMap(AgentChoice.init) else { return AgentChoice(.qodercli) }
             return exists(choice) ? choice : AgentChoice(choice.kind)
         }
         set {
             guard newValue != current else { return }
-            settings.defaults.set(newValue.rawValue, forKey: "agent")
+            Settings.defaults.set(newValue.rawValue, forKey: "agent")
             NotificationCenter.default.post(name: .agentKindDidChange, object: self)
         }
     }
@@ -373,6 +373,6 @@ final class AgentMenuAvailability: NSObject, NSMenuDelegate {
             item.isEnabled = reason == nil
             item.toolTip = reason
         }
-        AgentEnvironment.refreshAvailability(settings: providers.settings)
+        AgentEnvironment.refreshAvailability()
     }
 }

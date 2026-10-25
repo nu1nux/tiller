@@ -95,7 +95,7 @@ struct AgentSkill: Equatable, Sendable {
     }
 }
 
-/// The profile's skill library, in `agent-skills` in its folder:
+/// The skill library every profile shares, in `agent-skills` in the root folder:
 /// `skills.json` lists the skills, `library/<name>` holds each one, and
 /// `exposed` links the enabled ones where the CLIs look. Claude Code and
 /// Qoder CLI get `exposed` with `--add-dir` and read its `.claude/skills` and
@@ -104,6 +104,8 @@ struct AgentSkill: Equatable, Sendable {
 /// paths of its config.toml.
 @MainActor
 final class AgentSkillStore {
+    static let shared = AgentSkillStore(folder: Profiles.root)
+
     enum Source: String, Codable {
         case folder
         case archive
@@ -139,11 +141,9 @@ final class AgentSkillStore {
     /// Codex's extra skills root.
     nonisolated let exposedSkills: String
     private let indexPath: String
-    private let settings: ProfileSettings
 
     /// Creates the folders that --add-dir and Codex's skills root name.
-    init(folder: String, settings: ProfileSettings) {
-        self.settings = settings
+    private init(folder: String) {
         root = folder + "/agent-skills"
         libraryFolder = root + "/library"
         exposedFolder = root + "/exposed"
@@ -260,7 +260,7 @@ final class AgentSkillStore {
     func save(name: String, description: String?, content: String, files: [String: String], deleteFiles: [String]) throws -> AgentSkill {
         guard AgentSkill.isValidName(name) else { throw SkillError.badName(name) }
         let existing = entries.firstIndex { $0.name == name }
-        if existing == nil, let user = AgentSkillCatalog.userSkills(for: nil, workFolder: settings.agentFolderPath).first(where: { $0.name == name }) {
+        if existing == nil, let user = AgentSkillCatalog.userSkills(for: nil, workFolder: Settings.agentFolderPath).first(where: { $0.name == name }) {
             throw SkillError.notInLibrary(name: name, path: user.path ?? "")
         }
         var text = content
@@ -539,7 +539,7 @@ enum AgentSkillCatalog {
                         "editable": true, "enabled": entry.enabled]
             }
             let names = Set(store.entries.map(\.name))
-            let workFolder = profile.settings.agentFolderPath
+            let workFolder = Settings.agentFolderPath
             // The CLIs' folders are read off the main thread.
             return deferred {
                 userSkills(for: nil, workFolder: workFolder).filter { !names.contains($0.name) }
@@ -554,7 +554,7 @@ enum AgentSkillCatalog {
             // The library's skill is known here; the CLIs' folders, the file
             // and the folder's listing are read off the main thread.
             let library = store.entries.first { $0.name == name }.flatMap(store.skill(for:))
-            let workFolder = profile.settings.agentFolderPath
+            let workFolder = Settings.agentFolderPath
             return deferred { () throws -> (name: String, path: String, content: String, files: [String]) in
                 guard let skill = library ?? userSkills(for: nil, workFolder: workFolder).first(where: { $0.name == name }),
                     let path = skill.path, let folder = skill.folder

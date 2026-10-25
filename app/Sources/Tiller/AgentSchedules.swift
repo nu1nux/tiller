@@ -589,7 +589,7 @@ enum AgentScheduleControl {
         guard let chat, let conversation = profile.agentHistory.conversation(chat) else { return Caller() }
         return Caller(
             kind: conversation.choice,
-            tools: conversation.kind == .agy ? Set(AgentTool.allCases) : Set(conversation.tools ?? profile.settings.agentTools),
+            tools: conversation.kind == .agy ? Set(AgentTool.allCases) : Set(conversation.tools ?? Settings.agentTools),
             isScheduledRun: conversation.scheduleID != nil
         )
     }
@@ -652,7 +652,7 @@ enum AgentScheduleControl {
             schedule.modelOptions = nil
         }
         if let modelChange {
-            var options = schedule.modelOptions ?? profile.settings.agentModelOptions(for: schedule.choice)
+            var options = schedule.modelOptions ?? Settings.agentModelOptions(for: schedule.choice)
             modelChange(&options)
             try checkModelOptions(options, for: schedule.choice, providers: providers)
             schedule.modelOptions = options
@@ -760,7 +760,7 @@ enum AgentScheduleControl {
             "id": schedule.id, "name": schedule.name, "prompt": schedule.prompt, "agent": schedule.choice.rawValue,
             "tools": schedule.tools.map(\.rawValue), "rule": rule, "enabled": schedule.enabled,
         ]
-        let options = schedule.modelOptions ?? profile.settings.agentModelOptions(for: schedule.choice)
+        let options = schedule.modelOptions ?? Settings.agentModelOptions(for: schedule.choice)
         if let model = options.model { result["model"] = model }
         if let effort = options.effort { result["effort"] = effort }
         if let context = options.context { result["context"] = context }

@@ -175,7 +175,7 @@ enum AgentModelCatalog {
     /// fails to.
     static func refresh(_ kind: AgentKind, profile: ProfileContext) {
         guard kind != .claude, !refreshed.contains(kind) else { return }
-        let path = profile.settings.agentPath(for: kind)
+        let path = Settings.agentPath(for: kind)
         // Codex needs Tiller's CODEX_HOME, which has the user's login.
         guard let environment = try? AgentEnvironment.environment(for: kind, chat: "", profile: profile) else { return }
         refreshed.insert(kind)

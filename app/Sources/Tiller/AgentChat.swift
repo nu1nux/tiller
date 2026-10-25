@@ -44,7 +44,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
     /// The model, effort, context and fast mode this chat runs with. A new
     /// chat follows Settings' for its agent until one is picked for it.
     var modelOptions: AgentModelOptions {
-        (conversation?.modelOptions ?? pickedOptions ?? profile.settings.agentModelOptions(for: choice)).supported(by: choice)
+        (conversation?.modelOptions ?? pickedOptions ?? Settings.agentModelOptions(for: choice)).supported(by: choice)
     }
     /// Picked for a new chat before its first message.
     private var pickedOptions: AgentModelOptions?
@@ -176,7 +176,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
         id = conversation?.id ?? UUID().uuidString
         self.conversation = conversation
         presetKind = conversation == nil ? kind : nil
-        self.tools = conversation?.tools ?? tools ?? profile.settings.agentTools
+        self.tools = conversation?.tools ?? tools ?? Settings.agentTools
         pickedOptions = conversation == nil ? modelOptions : nil
         loadState = conversation == nil ? .loaded : .unloaded
         super.init(frame: .zero)
@@ -844,7 +844,7 @@ final class AgentChatView: NSView, NSTextViewDelegate {
         lastSent = (text, images)
         let skill = text.hasPrefix("/") ? SkillCompletion.skill(calledBy: text, in: availableSkills) : nil
         let pageContext = contextOverride ?? context?() ?? ""
-        guard !session.isRunning, AgentEnvironment.needsShellLookup(session.kind, settings: profile.settings) else {
+        guard !session.isRunning, AgentEnvironment.needsShellLookup(session.kind) else {
             return start(session, text: text, images: images, context: pageContext, skill: skill)
         }
         // Finding the CLI takes a login shell, which runs in the background,

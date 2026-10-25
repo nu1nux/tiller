@@ -73,14 +73,14 @@ final class AgentPanelView: NSView {
     /// which are missing.
     override func viewDidUnhide() {
         super.viewDidUnhide()
-        AgentEnvironment.refreshAvailability(settings: profile.settings)
+        AgentEnvironment.refreshAvailability()
         AgentModelCatalog.refreshAll(profile: profile)
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard window != nil, !isHiddenOrHasHiddenAncestor else { return }
-        AgentEnvironment.refreshAvailability(settings: profile.settings)
+        AgentEnvironment.refreshAvailability()
         AgentModelCatalog.refreshAll(profile: profile)
     }
 
@@ -141,7 +141,7 @@ final class AgentPanelView: NSView {
     /// Last time's tabs, up to the limit. A chat since deleted opens empty.
     private func restoreTabs() {
         let store = profile.agentHistory
-        for id in store.openTabs.prefix(profile.settings.agentTabs) {
+        for id in store.openTabs.prefix(Settings.agentTabs) {
             add(AgentChatView(profile: profile, conversation: id.isEmpty ? nil : store.conversation(id)))
         }
         if chats.isEmpty { add(AgentChatView(profile: profile)) }
@@ -210,7 +210,7 @@ final class AgentPanelView: NSView {
     }
 
     private func newTab() {
-        guard chats.count < profile.settings.agentTabs else { return NSSound.beep() }
+        guard chats.count < Settings.agentTabs else { return NSSound.beep() }
         add(AgentChatView(profile: profile))
         select(chats.count - 1, focus: true)
     }
@@ -267,7 +267,7 @@ final class AgentPanelView: NSView {
         tabBar.update(
             tabs: chats.map { (title: $0.title, busy: $0.isBusy) },
             selected: activeIndex,
-            canAddTab: chats.count < profile.settings.agentTabs
+            canAddTab: chats.count < Settings.agentTabs
         )
         chat.showOptions()
     }
@@ -383,7 +383,7 @@ final class AgentPanelView: NSView {
             guard let conversation = profile.agentHistory.conversation(id) else { return }
             chat = AgentChatView(profile: profile, conversation: conversation)
         }
-        if newTabIfRoom, chats.count < profile.settings.agentTabs {
+        if newTabIfRoom, chats.count < Settings.agentTabs {
             add(chat)
             select(chats.count - 1, focus: true)
         } else {

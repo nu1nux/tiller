@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 /// A profile's Settings window (Cmd+,), with General, Passwords, Sites,
 /// Extensions, Agent, Providers, Jev, Skills, Scheduled and Profiles panes. Every change is
 /// saved as it is made, in the profile, except the appearance, accent color,
-/// agent shortcut, updates, remote debugging and extensions, which every
-/// profile shares.
+/// tab layout, inactive tabs, updates, remote debugging, extensions and the
+/// Agent, Providers, Jev and Skills panes, which every profile shares.
 @MainActor
 final class SettingsWindowController: NSWindowController {
     private let tabs = SettingsTabViewController()
@@ -491,26 +491,27 @@ final class GeneralSettingsPane: SettingsPane, NSTextFieldDelegate {
         addRow("New tabs open with:", newTabPopUp)
 
         let tabLayoutPopUp = Self.popUp(
-            TabLayout.allCases, title: \.displayName, selected: settings.tabLayout,
+            TabLayout.allCases, title: \.displayName, selected: Settings.tabLayout,
             target: self, action: #selector(tabLayoutChanged(_:))
         )
         self.tabLayoutPopUp = tabLayoutPopUp
         addRow("Show tabs:", tabLayoutPopUp)
+        addNote(Self.note("For every profile, as is the sidebar's width."))
 
         let unloadTabs = NSButton(
             checkboxWithTitle: "Unload inactive tabs to save memory", target: self, action: #selector(unloadTabsChanged(_:))
         )
-        unloadTabs.state = settings.unloadsInactiveTabs ? .on : .off
+        unloadTabs.state = Settings.unloadsInactiveTabs ? .on : .off
         unloadTabsButton = unloadTabs
         Self.linkLabel(of: addRow("Inactive tabs:", unloadTabs), to: unloadTabs)
         let unloadDelayPopUp = Self.popUp(
-            TabUnloadDelay.allCases, title: \.displayName, selected: settings.tabUnloadDelay,
+            TabUnloadDelay.allCases, title: \.displayName, selected: Settings.tabUnloadDelay,
             target: self, action: #selector(unloadDelayChanged(_:))
         )
         self.unloadDelayPopUp = unloadDelayPopUp
         unloadDelayRow = addRow("Unload after:", unloadDelayPopUp)
-        Self.setRow(unloadDelayRow, enabled: settings.unloadsInactiveTabs)
-        addNote(Self.note("Also when the Mac runs low on memory. An unloaded tab reloads when you select it."))
+        Self.setRow(unloadDelayRow, enabled: Settings.unloadsInactiveTabs)
+        addNote(Self.note("For every profile. Also when the Mac runs low on memory. An unloaded tab reloads when you select it."))
 
         let themePopUp = Self.popUp(
             ChromeTheme.allCases, title: \.displayName, image: { Self.swatch($0.swatchColor) }, selected: Settings.theme,
@@ -596,10 +597,10 @@ final class GeneralSettingsPane: SettingsPane, NSTextFieldDelegate {
         templateField.stringValue = settings.searchTemplate
         launchPopUp?.selectItem(at: LaunchTabs.allCases.firstIndex(of: settings.launchTabs) ?? 0)
         newTabPopUp?.selectItem(at: NewTabPage.allCases.firstIndex(of: settings.newTabPage) ?? 0)
-        tabLayoutPopUp?.selectItem(at: TabLayout.allCases.firstIndex(of: settings.tabLayout) ?? 0)
-        unloadTabsButton?.state = settings.unloadsInactiveTabs ? .on : .off
-        unloadDelayPopUp?.selectItem(at: TabUnloadDelay.allCases.firstIndex(of: settings.tabUnloadDelay) ?? 0)
-        Self.setRow(unloadDelayRow, enabled: settings.unloadsInactiveTabs)
+        tabLayoutPopUp?.selectItem(at: TabLayout.allCases.firstIndex(of: Settings.tabLayout) ?? 0)
+        unloadTabsButton?.state = Settings.unloadsInactiveTabs ? .on : .off
+        unloadDelayPopUp?.selectItem(at: TabUnloadDelay.allCases.firstIndex(of: Settings.tabUnloadDelay) ?? 0)
+        Self.setRow(unloadDelayRow, enabled: Settings.unloadsInactiveTabs)
         themePopUp?.selectItem(at: ChromeTheme.allCases.firstIndex(of: Settings.theme) ?? 0)
         appearancePopUp?.selectItem(at: Appearance.allCases.firstIndex(of: Settings.appearance) ?? 0)
         accentPopUp?.selectItem(at: AccentTheme.allCases.firstIndex(of: Settings.accentTheme) ?? 0)
@@ -650,17 +651,17 @@ final class GeneralSettingsPane: SettingsPane, NSTextFieldDelegate {
 
     @objc private func tabLayoutChanged(_ sender: NSPopUpButton) {
         guard let layout = (sender.selectedItem?.representedObject as? String).flatMap(TabLayout.init) else { return }
-        settings.tabLayout = layout
+        Settings.tabLayout = layout
     }
 
     @objc private func unloadTabsChanged(_ sender: NSButton) {
-        settings.unloadsInactiveTabs = sender.state == .on
+        Settings.unloadsInactiveTabs = sender.state == .on
         Self.setRow(unloadDelayRow, enabled: sender.state == .on)
     }
 
     @objc private func unloadDelayChanged(_ sender: NSPopUpButton) {
         guard let delay = (sender.selectedItem?.representedObject as? String).flatMap(TabUnloadDelay.init) else { return }
-        settings.tabUnloadDelay = delay
+        Settings.tabUnloadDelay = delay
     }
 
     @objc private func themeChanged(_ sender: NSPopUpButton) {
@@ -1466,7 +1467,7 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
         agentPopUp = popUp
         AgentMenuAvailability.watch(popUp, providers: profile.providers)
         addRow("New chats use:", popUp)
-        addNote(Self.note("A running chat keeps its agent."))
+        addNote(Self.note("For every profile, as is all of this pane. A running chat keeps its agent."))
         NotificationCenter.default.addObserver(
             self, selector: #selector(currentAgentChanged(_:)), name: .agentKindDidChange, object: nil
         )
@@ -1476,7 +1477,7 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
             tabsPopUp.addItem(withTitle: "\(count)")
             tabsPopUp.lastItem?.tag = count
         }
-        tabsPopUp.selectItem(withTag: settings.agentTabs)
+        tabsPopUp.selectItem(withTag: Settings.agentTabs)
         tabsPopUp.target = self
         tabsPopUp.action = #selector(tabsChanged(_:))
         addRow("Chat tabs:", tabsPopUp)
@@ -1534,7 +1535,7 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
         let checkboxes = AgentTool.allCases.enumerated().map { index, tool in
             let checkbox = NSButton(checkboxWithTitle: tool.displayName, target: self, action: #selector(toolChanged(_:)))
             checkbox.tag = index
-            checkbox.state = settings.agentToolEnabled(tool) ? .on : .off
+            checkbox.state = Settings.agentToolEnabled(tool) ? .on : .off
             return checkbox
         }
         let tools = NSStackView(views: checkboxes)
@@ -1552,7 +1553,7 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
         toolsNote.preferredMaxLayoutWidth = Self.wideControlWidth
         addNote(toolsNote)
 
-        folderField.stringValue = settings.agentFolder
+        folderField.stringValue = Settings.agentFolder
         folderField.placeholderString = "An empty folder"
         folderField.delegate = self
         let choose = NSButton(title: "Choose…", target: self, action: #selector(chooseFolder(_:)))
@@ -1577,7 +1578,7 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
         box.heightAnchor.constraint(equalToConstant: 96).isActive = true
         let textView = scroll.documentView as! NSTextView
         textView.drawsBackground = false
-        textView.string = settings.agentInstructions
+        textView.string = Settings.agentInstructions
         textView.font = .systemFont(ofSize: Theme.FontSize.body)
         textView.isRichText = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -1628,7 +1629,7 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
         case .some(let path?): path
         case .some(nil): "\(kind.rawValue) not found"
         }
-        if let path = settings.agentPath(for: kind) {
+        if let path = Settings.agentPath(for: kind) {
             if FileManager.default.isExecutableFile(atPath: path) {
                 Self.show("Tiller runs this file for \(kind.displayName).", in: pathNote)
             } else {
@@ -1642,7 +1643,7 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
     }
 
     private func showFolderState() {
-        guard let folder = settings.agentFolderPath else {
+        guard let folder = Settings.agentFolderPath else {
             Self.show("Leave empty so no project's files or instructions load.", in: folderNote)
             return
         }
@@ -1656,7 +1657,7 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
 
     private func showModelOptions() {
         let kind = modelKind
-        let options = settings.agentModelOptions(for: kind)
+        let options = Settings.agentModelOptions(for: kind)
         modelButton.title = options.isDefault ? "\(profile.providers.displayName(kind))'s own" : options.summary(for: kind)
     }
 
@@ -1684,16 +1685,16 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
     @objc private func chooseModel(_ sender: NSButton) {
         let kind = modelKind
         AgentModelMenu.popUp(
-            from: sender, kind: kind, profile: profile, options: settings.agentModelOptions(for: kind)
+            from: sender, kind: kind, profile: profile, options: Settings.agentModelOptions(for: kind)
         ) { [weak self] options in
-            self?.settings.setAgentModelOptions(options, for: kind)
+            Settings.setAgentModelOptions(options, for: kind)
             self?.showModelOptions()
         }
     }
 
     @objc private func toolChanged(_ sender: NSButton) {
         guard AgentTool.allCases.indices.contains(sender.tag) else { return }
-        settings.setAgentTool(AgentTool.allCases[sender.tag], enabled: sender.state == .on)
+        Settings.setAgentTool(AgentTool.allCases[sender.tag], enabled: sender.state == .on)
     }
 
     @objc private func chooseFolder(_ sender: NSButton) {
@@ -1703,13 +1704,13 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.message = "Choose the folder the agent works in"
-        if let current = settings.agentFolderPath { panel.directoryURL = URL(fileURLWithPath: current) }
+        if let current = Settings.agentFolderPath { panel.directoryURL = URL(fileURLWithPath: current) }
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.folderField.stringValue = url.path
-                self.settings.agentFolder = url.path
+                Settings.agentFolder = url.path
                 self.showFolderState()
             }
         }
@@ -1717,18 +1718,18 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
 
     func controlTextDidChange(_ notification: Notification) {
         if notification.object as? NSTextField === folderField {
-            settings.agentFolder = folderField.stringValue
+            Settings.agentFolder = folderField.stringValue
             showFolderState()
             return
         }
         guard notification.object as? NSTextField === pathField else { return }
-        settings.setAgentPath(pathField.stringValue, for: pathKind)
+        Settings.setAgentPath(pathField.stringValue, for: pathKind)
         showPathState()
     }
 
     func textDidChange(_ notification: Notification) {
         guard let textView = instructionsView else { return }
-        settings.agentInstructions = textView.string
+        Settings.agentInstructions = textView.string
     }
 
     @objc private func agentChanged(_ sender: NSPopUpButton) {
@@ -1737,7 +1738,7 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
     }
 
     @objc private func tabsChanged(_ sender: NSPopUpButton) {
-        settings.agentTabs = sender.selectedTag()
+        Settings.agentTabs = sender.selectedTag()
     }
 
     private func shortcutRecorded(_ shortcut: Shortcut?) {
@@ -1785,14 +1786,14 @@ final class AgentSettingsPane: SettingsPane, NSTextFieldDelegate, NSTextViewDele
         panel.treatsFilePackagesAsDirectories = true
         panel.showsHiddenFiles = true
         panel.message = "Choose the \(kind.displayName) executable"
-        if let current = settings.agentPath(for: kind) ?? detected[kind] ?? nil {
+        if let current = Settings.agentPath(for: kind) ?? detected[kind] ?? nil {
             panel.directoryURL = URL(fileURLWithPath: current).deletingLastPathComponent()
         }
         panel.beginSheetModal(for: window) { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.settings.setAgentPath(url.path, for: kind)
+                Settings.setAgentPath(url.path, for: kind)
                 if self.pathKind == kind { self.loadPathField() }
             }
         }
@@ -1906,8 +1907,8 @@ final class SkillsSettingsPane: NSViewController, NSTableViewDataSource, NSTable
 
     private func showDefaultNote() {
         SettingsPane.show(
-            "Every agent can call these with /name, besides its own skills. Changes apply when a chat's agent next "
-                + "starts. Agents can also create and improve skills here when you ask them to.",
+            "Every agent in every profile can call these with /name, besides its own skills. Changes apply when a "
+                + "chat's agent next starts. Agents can also create and improve skills here when you ask.",
             in: note
         )
     }

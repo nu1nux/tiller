@@ -166,7 +166,7 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
         selected: Int, opening url: String?
     ) {
         self.profile = profile
-        tabLayout = profile.settings.tabLayout
+        tabLayout = Settings.tabLayout
         agentPanel = AgentPanelView(profile: profile, frame: NSRect(x: 0, y: 0, width: 360, height: 600))
         agentPanelShown = profile.settings.defaults.bool(forKey: Self.agentVisibleKey)
         super.init()
@@ -186,9 +186,8 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
         sidebarMinWidth.isActive = true
         sidebarMaxWidth.isActive = true
         sidebar.isHidden = tabLayout != .vertical
-        sidebar.isCollapsed = profile.settings.sidebarCollapsed
-        let savedWidth = profile.settings.defaults.double(forKey: Self.sidebarWidthKey)
-        if savedWidth > 0 { sidebarWidth = savedWidth }
+        sidebar.isCollapsed = Settings.sidebarCollapsed
+        if Settings.sidebarWidth > 0 { sidebarWidth = Settings.sidebarWidth }
         agentPanel.widthAnchor.constraint(greaterThanOrEqualToConstant: 280).isActive = true
         contentView.widthAnchor.constraint(greaterThanOrEqualToConstant: 320).isActive = true
         agentPanel.delegate = self
@@ -231,6 +230,7 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(passwordsChanged(_:)), name: .passwordsDidChange, object: profile.passwords)
         center.addObserver(self, selector: #selector(tabLayoutChanged(_:)), name: .tabLayoutDidChange, object: nil)
+        center.addObserver(self, selector: #selector(sidebarChanged(_:)), name: .sidebarDidChange, object: nil)
         center.addObserver(self, selector: #selector(themeChanged(_:)), name: .themeDidChange, object: nil)
         center.addObserver(self, selector: #selector(addressDisplayChanged(_:)), name: .addressDisplayDidChange, object: nil)
         center.addObserver(self, selector: #selector(downloadsChanged(_:)), name: .downloadsDidChange, object: nil)
@@ -449,7 +449,7 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
         unloadTimer = Timer.scheduledTimer(withTimeInterval: Self.unloadCheckInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.unload(self.unloadCandidates(unusedFor: self.profile.settings.tabUnloadDelay.interval))
+                self.unload(self.unloadCandidates(unusedFor: Settings.tabUnloadDelay.interval))
             }
         }
         unloadTimer?.tolerance = 10
@@ -475,7 +475,7 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
     /// Loaded tabs that may unload, unused longest first: not the one in
     /// front, one an agent keeps awake or waits on, or one with the screen.
     private func unloadCandidates(unusedFor minimum: TimeInterval) -> [Tab] {
-        guard profile.settings.unloadsInactiveTabs, !closingAll else { return [] }
+        guard Settings.unloadsInactiveTabs, !closingAll else { return [] }
         let now = Date()
         let waitedOn = Set(Self.loadWaiters.map { ObjectIdentifier($0.tab) })
         return tabs
@@ -1083,7 +1083,7 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
     /// Moves the tabs between the toolbar and the sidebar.
     @objc func toggleTabSidebar(_ sender: Any?) {
         guard fullscreenTab == nil else { return }
-        profile.settings.tabLayout = tabLayout == .vertical ? .horizontal : .vertical
+        Settings.tabLayout = tabLayout == .vertical ? .horizontal : .vertical
     }
 
     // MARK: Zoom
@@ -1248,7 +1248,6 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
     private static let agentVisibleKey = "agentPanelVisible"
     /// The panel's width until the divider is dragged.
     private static let defaultAgentPanelWidth: CGFloat = 400
-    private static let sidebarWidthKey = "sidebarWidth"
 
     // MARK: Scheduled prompts
 
@@ -1575,8 +1574,8 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
     // MARK: Tab layout
 
     @objc private func tabLayoutChanged(_ notification: Notification) {
-        guard profile.settings.tabLayout != tabLayout else { return }
-        tabLayout = profile.settings.tabLayout
+        guard Settings.tabLayout != tabLayout else { return }
+        tabLayout = Settings.tabLayout
         applyTabLayout()
         if fullscreenTab != nil { hideChromeForFullscreen() }
         if let selectedTab { tabStrip.update(tabs: tabs, selected: selectedTab) }
@@ -1666,7 +1665,7 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
     @objc func toggleSidebarCollapsed(_ sender: Any?) {
         guard tabLayout == .vertical, fullscreenTab == nil else { return }
         sidebar.isCollapsed.toggle()
-        profile.settings.sidebarCollapsed = sidebar.isCollapsed
+        Settings.sidebarCollapsed = sidebar.isCollapsed
         fitSidebar()
         // The width snaps, since easing it would resize the page on every
         // frame; the sidebar's rows fade up into their new shape instead.
@@ -1684,7 +1683,18 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
     }
 
     @objc private func saveSidebarWidth() {
-        profile.settings.defaults.set(Double(sidebarWidth), forKey: Self.sidebarWidthKey)
+        Settings.sidebarWidth = Double(sidebarWidth)
+    }
+
+    /// Another window collapsed, expanded or resized the sidebar, which
+    /// every window shares.
+    @objc private func sidebarChanged(_ notification: Notification) {
+        let width = Settings.sidebarWidth > 0 ? CGFloat(Settings.sidebarWidth) : sidebarWidth
+        guard sidebar.isCollapsed != Settings.sidebarCollapsed || width != sidebarWidth else { return }
+        sidebar.isCollapsed = Settings.sidebarCollapsed
+        sidebarWidth = width
+        guard tabLayout == .vertical, fullscreenTab == nil else { return }
+        fitSidebar()
     }
 
     private static let reloadImage = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Reload")
@@ -2219,7 +2229,7 @@ extension BrowserWindowController {
             var options: AgentModelOptions?
             let keys = ["model", "effort", "context"]
             if keys.contains(where: { params[$0] != nil }) || params["fast"] != nil {
-                var picked = profile.settings.agentModelOptions(for: chosen)
+                var picked = Settings.agentModelOptions(for: chosen)
                 if let model = params["model"] as? String { picked.model = model.isEmpty ? nil : model }
                 if let effort = params["effort"] as? String { picked.effort = effort.isEmpty ? nil : effort }
                 if let context = params["context"] as? String { picked.context = context.isEmpty ? nil : context }
@@ -2424,7 +2434,7 @@ extension BrowserWindowController {
             (NSApp.delegate as? AppDelegate)?.showSettings(pane: text, profile: profile)
         case "tabLayout":
             guard let layout = TabLayout(rawValue: text) else { throw ControlError("no tab layout \(text)") }
-            profile.settings.tabLayout = layout
+            Settings.tabLayout = layout
         case "appearance":
             NSApp.appearance = switch text {
             case "dark": NSAppearance(named: .darkAqua)
@@ -2510,14 +2520,6 @@ extension BrowserWindowController {
         profile.session.clearClosedTabs()
         // So each open tab saves its favicon again.
         tabs.forEach { $0.recordedIcon = nil }
-    }
-
-    /// The tab sidebar's icons-only state, for `tiller settings`.
-    func setSidebarCollapsed(_ collapsed: Bool) {
-        profile.settings.sidebarCollapsed = collapsed
-        guard tabLayout == .vertical, fullscreenTab == nil, sidebar.isCollapsed != collapsed else { return }
-        sidebar.isCollapsed = collapsed
-        fitSidebar()
     }
 
     var tabCount: Int { tabs.count }

@@ -4,7 +4,7 @@ Tiller's settings, the switches it passes to Chromium, and where it stores data.
 
 ## Settings
 
-Tiller > Settings… (Cmd+,) opens the Settings of the front window's profile. It has ten panes: General, Passwords, Sites (see [Camera and microphone](browser.md#camera-and-microphone)), Extensions (see [Extensions](browser.md#extensions)), Agent, Providers (see [Custom providers](agent.md#custom-providers)), Jev (see [run_task](tools.md#run_task)), Skills (see [Skills](agent.md#tillers-skill-library)), Scheduled (see [Scheduled prompts](agent.md#scheduled-prompts)) and Profiles (see [Profiles](browser.md#profiles)). Changes are saved as you make them, and apply to that profile only, except the default browser, which macOS keeps for the app, and the theme, appearance, accent color, agent shortcut, updates, extensions, remote debugging and Profile Tabs, which every profile shares.
+Tiller > Settings… (Cmd+,) opens the Settings of the front window's profile. It has ten panes: General, Passwords, Sites (see [Camera and microphone](browser.md#camera-and-microphone)), Extensions (see [Extensions](browser.md#extensions)), Agent, Providers (see [Custom providers](agent.md#custom-providers)), Jev (see [run_task](tools.md#run_task)), Skills (see [Skills](agent.md#tillers-skill-library)), Scheduled (see [Scheduled prompts](agent.md#scheduled-prompts)) and Profiles (see [Profiles](browser.md#profiles)). Changes are saved as you make them, and apply to that profile only, except the default browser, which macOS keeps for the app, and the theme, appearance, accent color, tab layout and sidebar, inactive tabs, updates, extensions, remote debugging, Profile Tabs and everything in the Agent, Providers, Jev and Skills panes, which every profile shares.
 
 | Pane | Setting | Default | Takes effect |
 |---|---|---|---|
@@ -12,9 +12,9 @@ Tiller > Settings… (Cmd+,) opens the Settings of the front window's profile. I
 | General | Homepage | `https://www.google.com/` | next launch if chosen below or there are no tabs to restore, and new tabs if chosen below |
 | General | At launch, open: Tabs from Last Time or Homepage | Tabs from Last Time | next launch |
 | General | New tabs open with: Blank Page or Homepage | Blank Page | next new tab |
-| General | Show tabs: Along the Top or In a Sidebar | Along the Top | right away |
-| General | Inactive tabs: Unload inactive tabs to save memory, also when the Mac runs low on memory (see [Unloading inactive tabs](browser.md#unloading-inactive-tabs)) | on | right away |
-| General | Unload after: 15 Minutes, 30 Minutes, 1 Hour or 4 Hours | 30 Minutes | within a minute |
+| General | Show tabs: Along the Top or In a Sidebar. The sidebar's width and whether it shows only icons are shared too | Along the Top | right away, for every profile |
+| General | Inactive tabs: Unload inactive tabs to save memory, also when the Mac runs low on memory (see [Unloading inactive tabs](browser.md#unloading-inactive-tabs)) | on | right away, for every profile |
+| General | Unload after: 15 Minutes, 30 Minutes, 1 Hour or 4 Hours | 30 Minutes | within a minute, for every profile |
 | General | Theme: Tiller, Claude or Qoder. Tiller uses the system's colors; Claude takes Anthropic's ivory or warm near-black with Claude's orange, and Qoder its Forest greens, for the window, sidebar, toolbar, agent panel and start page, light or dark as the appearance is. Buttons, focus rings, text selection and the Settings window stay the system's | Tiller | right away, for every profile |
 | General | Appearance: Match System, Light or Dark, for Tiller's windows and for pages, which see it as `prefers-color-scheme` | Match System | right away, for every profile |
 | General | Accent color: Match System, Graphite, Blue, Teal, Green, Orange or Pink, for Tiller's selections, chat bubbles, busy dots and the start page. Buttons, focus rings and text selection keep the system accent. Only with the Tiller theme; Claude and Qoder have their own | Match System | right away, for every profile |
@@ -22,14 +22,15 @@ Tiller > Settings… (Cmd+,) opens the Settings of the front window's profile. I
 | General | Custom search URL, with `%s` for the query | empty | next search; Google is used while it isn't a valid http(s) URL with `%s` |
 | General | Updates: Check automatically, and Include beta versions. Only in released builds, which also have Tiller > Check for Updates… | checks automatically, no betas | right away, for every profile |
 | General | Allow remote debugging (CDP), stored as `remoteDebuggingEnabled` | off | next launch, on `127.0.0.1:9222`, for every profile |
-| Agent | New chats use: Qoder CLI, Claude Code, Codex, Antigravity CLI or Grok Build | Qoder CLI | next new chat; same as the picker in the panel |
-| Agent | Chat tabs: how many chats the panel keeps open at once, 1 to 9 | 3 | right away; tabs already open stay |
+| Agent | New chats use: Qoder CLI, Claude Code, Codex, Antigravity CLI or Grok Build | Qoder CLI | next new chat, for every profile; same as the picker in the panel |
+| Agent | Chat tabs: how many chats the panel keeps open at once, 1 to 9 | 3 | right away, for every profile; tabs already open stay |
 | Agent | Show and hide shortcut: click, then press a combination with Cmd or Ctrl. Delete clears it; one already in a menu is refused | Cmd+Shift+S | right away, for every profile |
-| Agent | Command: pick a CLI, then the file to run it from | empty, meaning look it up | next new chat |
-| Agent | Model: pick a CLI, then its model, thinking effort, context window and fast mode (see [Model and effort](agent.md#model-and-effort)) | the CLI's own | next new chat |
-| Agent | Extra instructions, added after Tiller's system prompt | empty | next new chat |
+| Agent | Command: pick a CLI, then the file to run it from | empty, meaning look it up | next new chat, for every profile |
+| Agent | Model: pick a CLI, then its model, thinking effort, context window and fast mode (see [Model and effort](agent.md#model-and-effort)) | the CLI's own | next new chat, for every profile |
+| Agent | Allowed tools and working folder | none, and an empty folder in the profile's folder | next new chat, for every profile |
+| Agent | Extra instructions, added after Tiller's system prompt | empty | next new chat, for every profile |
 | Sites | Each site's camera and microphone choice: Ask, Allow or Block, or the site removed | none | the site's next request |
-| Skills | Each skill in the library: on or off, added from a folder, archive or Git, or removed | none | a chat's next agent start |
+| Skills | Each skill in the library: on or off, added from a folder, archive or Git, or removed | none | a chat's next agent start, for every profile |
 | Scheduled | Each scheduled prompt: on or off, its name, agent, tools, rule and prompt, added, edited, run now or removed | none | right away |
 | Profiles | Show every open profile in one window, with a rail to switch between them, stored as `profileTabs` (see [Profile Tabs](browser.md#profile-tabs)). Also View > Profile Tabs | off | right away, for every profile |
 
@@ -67,8 +68,8 @@ Tiller keeps its data in `~/Library/Application Support/Tiller`. Set `TILLER_DAT
 | `Chromium/` | Chromium's own files, such as `Local State` and `chrome_debug.log` |
 | `Chromium/<id>/` | One profile's Chromium data: cookies, cache and site data |
 | `Chromium/NativeMessagingHosts/` | Links to Chrome's native messaging manifests, made at each launch so extensions can reach their Mac apps. Files put there by hand are kept |
-| `Profiles/<id>/` | One profile: `history.sqlite`, `passwords.json`, `session.json`, `agent-chats/`, `agent-skills/`, `agent-schedules.json`, the agent's working folder, the control socket while it is open, and `instance.lock`, held while it is open |
-| `Profiles/<id>/agent-skills/` | The [skill library](agent.md#tillers-skill-library): `skills.json` lists each skill's name, where it came from (a folder, an archive, Git or an agent) and whether it's on; `library/` holds the skills and `exposed/` links the ones that are on |
+| `Profiles/<id>/` | One profile: `history.sqlite`, `passwords.json`, `session.json`, `agent-chats/`, `agent-schedules.json`, the agent's working folder, the control socket while it is open, and `instance.lock`, held while it is open |
+| `agent-skills/` | The [skill library](agent.md#tillers-skill-library), which every profile shares: `skills.json` lists each skill's name, where it came from (a folder, an archive, Git or an agent) and whether it's on; `library/` holds the skills and `exposed/` links the ones that are on |
 | `Profiles/<id>/agent-schedules.json` | The [scheduled prompts](agent.md#scheduled-prompts): each one's name, prompt, agent, tools, model options, rule, whether it's on, its next run, and its last run with how it went and its chat |
 | `extensions.json` | The extensions: each one's folder, where it came from (a folder, a CRX file or Chrome), and whether it's on and pinned |
 | `Extensions/` | Extensions Tiller unpacked or copied, Chrome Web Store installs included, one folder each, named by id plus a random suffix so an update never overwrites files Chromium has loaded. Folders nothing uses any more are deleted at launch |
@@ -76,6 +77,14 @@ Tiller keeps its data in `~/Library/Application Support/Tiller`. Set `TILLER_DAT
 Unix socket paths are limited to 104 bytes, so for a long folder path set `TILLER_SOCKET` to a shorter socket path. The app and `tiller_mcp` both read it. It applies to the first profile Tiller opens only, since two profiles can't share a socket.
 
 ## Migrations
+
+### To settings every profile shares
+
+The tab layout and sidebar, tab unloading, the agent's setup, providers, run_task's settings and the skill library used to be kept per profile. At the first launch that shares them (`SharedSettingsMigration.swift`):
+
+- It takes those settings from the default profile, or the oldest one if it was deleted, unless the app has them already, and removes them from every profile. The other profiles' values are dropped.
+- It moves the profiles' skills into `agent-skills/` in the data folder, the default profile's first, then the others' whose names aren't taken yet. A skill whose name was taken stays in its profile's `agent-skills/`.
+- run_task's keys stay where the default profile kept them in the Keychain; keys saved in another profile have to be entered again.
 
 ### From a process per profile to one process
 

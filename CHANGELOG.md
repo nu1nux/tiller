@@ -7,6 +7,11 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+- Tab layout, the tab sidebar's width and collapsed state, and tab unloading are the same in every profile.
+- Settings in **Settings > Agent** and **Settings > Jev** now apply to every profile.
+- Custom providers in **Settings > Providers** and skills in **Settings > Skills** are shared by every profile.
+- Existing settings come from the default profile, and skills from all profiles are merged into one library.
+
 ## 0.5.0
 
 - Extensions see Tiller's tabs and windows, so `chrome.tabs.query` finds the current tab.

@@ -5,13 +5,11 @@ import AppKit
 /// that profile's user defaults. Runs after RenameMigration and before the
 /// core starts, because Chromium opens the profile's folder as soon as it loads.
 enum ProfileMigration {
-    /// Settings that belong to a profile. Window frames, the agent shortcut
-    /// and debug launch arguments stay with the app.
+    /// Settings that belong to a profile. Window frames, the agent's setup
+    /// and shortcut, and debug launch arguments stay with the app.
     private static let keys: Set<String> = [
-        "homepage", "launchTabs", "newTabPage", "searchEngine", "searchTemplate",
-        "agent", "agentFolder", "agentInstructions", "agentPanelVisible", "agentTabs",
+        "homepage", "launchTabs", "newTabPage", "searchEngine", "searchTemplate", "agentPanelVisible",
     ]
-    private static let keyPrefixes = ["agentTool.", "agentPath."]
 
     static func run() {
         moveData()
@@ -66,7 +64,7 @@ enum ProfileMigration {
         let standard = UserDefaults.standard
         guard let bundleID = Bundle.main.bundleIdentifier,
               let domain = standard.persistentDomain(forName: bundleID) else { return }
-        let settings = domain.filter { key, _ in keys.contains(key) || keyPrefixes.contains { key.hasPrefix($0) } }
+        let settings = domain.filter { key, _ in keys.contains(key) }
         guard !settings.isEmpty else { return }
         let suite = Profiles.suiteName(for: Profiles.defaultID)
         if standard.persistentDomain(forName: suite)?.isEmpty ?? true {

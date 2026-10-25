@@ -199,9 +199,9 @@ enum AccentTheme: String, CaseIterable {
     }
 }
 
-/// Settings that apply to the whole app, in its own user defaults: how
-/// windows look, the agent panel's shortcut and whether CDP is enabled, which
-/// every profile's window shares since one process runs them all.
+/// Settings that apply to the whole app, in its own user defaults, which
+/// every profile shares: how windows look and where their tabs go, the
+/// agent's setup and shortcut, and whether CDP is enabled.
 enum Settings {
     static var defaults: UserDefaults { .standard }
 
@@ -300,6 +300,122 @@ enum Settings {
     static func resetAgentShortcut() {
         defaults.removeObject(forKey: "agentShortcut")
     }
+
+    // MARK: Tabs
+
+    static var tabLayout: TabLayout {
+        get { defaults.string(forKey: "tabLayout").flatMap(TabLayout.init) ?? .horizontal }
+        set {
+            defaults.set(newValue.rawValue, forKey: "tabLayout")
+            NotificationCenter.default.post(name: .tabLayoutDidChange, object: nil)
+        }
+    }
+
+    /// Whether background tabs unload after `tabUnloadDelay` unused, and
+    /// sooner when the Mac runs short of memory. On unless turned off.
+    static var unloadsInactiveTabs: Bool {
+        get { defaults.object(forKey: "unloadInactiveTabs") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "unloadInactiveTabs") }
+    }
+
+    static var tabUnloadDelay: TabUnloadDelay {
+        get { defaults.string(forKey: "tabUnloadDelay").flatMap(TabUnloadDelay.init) ?? .thirtyMinutes }
+        set { defaults.set(newValue.rawValue, forKey: "tabUnloadDelay") }
+    }
+
+    /// Whether the tab sidebar shows only icons.
+    static var sidebarCollapsed: Bool {
+        get { defaults.bool(forKey: "sidebarCollapsed") }
+        set {
+            guard newValue != sidebarCollapsed else { return }
+            defaults.set(newValue, forKey: "sidebarCollapsed")
+            NotificationCenter.default.post(name: .sidebarDidChange, object: nil)
+        }
+    }
+
+    /// The tab sidebar's width when expanded, as last dragged. Zero means
+    /// the default.
+    static var sidebarWidth: Double {
+        get { defaults.double(forKey: "sidebarWidth") }
+        set {
+            guard newValue != sidebarWidth else { return }
+            defaults.set(newValue, forKey: "sidebarWidth")
+            NotificationCenter.default.post(name: .sidebarDidChange, object: nil)
+        }
+    }
+
+    // MARK: Agent
+
+    /// The CLI to run for `kind`, with `~` expanded. Nil means look it up.
+    static func agentPath(for kind: AgentKind) -> String? {
+        defaults.string(forKey: kind.pathDefaultsKey).flatMap { $0.isEmpty ? nil : NSString(string: $0).expandingTildeInPath }
+    }
+
+    static func setAgentPath(_ path: String, for kind: AgentKind) {
+        let path = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        if path.isEmpty {
+            defaults.removeObject(forKey: kind.pathDefaultsKey)
+        } else {
+            defaults.set(path, forKey: kind.pathDefaultsKey)
+        }
+    }
+
+    /// Added after Tiller's own system prompt.
+    static var agentInstructions: String {
+        get { defaults.string(forKey: "agentInstructions") ?? "" }
+        set { defaults.set(newValue, forKey: "agentInstructions") }
+    }
+
+    /// Built-in tools the agent gets besides Tiller's. All off by default.
+    static func agentToolEnabled(_ tool: AgentTool) -> Bool {
+        defaults.bool(forKey: tool.defaultsKey)
+    }
+
+    static func setAgentTool(_ tool: AgentTool, enabled: Bool) {
+        defaults.set(enabled, forKey: tool.defaultsKey)
+    }
+
+    static var agentTools: [AgentTool] { AgentTool.allCases.filter(agentToolEnabled) }
+
+    /// The model options new chats with `kind` start with, each provider
+    /// keeping its own. All the CLI's own by default.
+    static func agentModelOptions(for kind: AgentChoice) -> AgentModelOptions {
+        defaults.data(forKey: "agentModelOptions.\(kind.rawValue)")
+            .flatMap { try? JSONDecoder().decode(AgentModelOptions.self, from: $0) } ?? AgentModelOptions()
+    }
+
+    static func setAgentModelOptions(_ options: AgentModelOptions, for kind: AgentChoice) {
+        let key = "agentModelOptions.\(kind.rawValue)"
+        if options.isDefault {
+            defaults.removeObject(forKey: key)
+        } else {
+            defaults.set(try? JSONEncoder().encode(options), forKey: key)
+        }
+        NotificationCenter.default.post(name: .agentModelOptionsDidChange, object: nil)
+    }
+
+    /// As typed. Empty means Tiller's own empty folder.
+    static var agentFolder: String {
+        get { defaults.string(forKey: "agentFolder") ?? "" }
+        set { defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "agentFolder") }
+    }
+
+    /// The folder the agent works in, with `~` expanded. Nil means Tiller's own.
+    static var agentFolderPath: String? {
+        agentFolder.isEmpty ? nil : NSString(string: agentFolder).expandingTildeInPath
+    }
+
+    /// How many chats the agent panel keeps open in tabs at once.
+    static var agentTabs: Int {
+        get {
+            let value = defaults.integer(forKey: "agentTabs")
+            return value == 0 ? defaultAgentTabs : min(max(value, agentTabsRange.lowerBound), agentTabsRange.upperBound)
+        }
+        set {
+            defaults.set(newValue, forKey: "agentTabs")
+            NotificationCenter.default.post(name: .agentTabsDidChange, object: nil)
+        }
+    }
 }
 
 /// The settings a profile keeps for itself, in its own user defaults (see
@@ -335,32 +451,6 @@ struct ProfileSettings: @unchecked Sendable {
     var newTabPage: NewTabPage {
         get { defaults.string(forKey: "newTabPage").flatMap(NewTabPage.init) ?? .blank }
         nonmutating set { defaults.set(newValue.rawValue, forKey: "newTabPage") }
-    }
-
-    var tabLayout: TabLayout {
-        get { defaults.string(forKey: "tabLayout").flatMap(TabLayout.init) ?? .horizontal }
-        nonmutating set {
-            defaults.set(newValue.rawValue, forKey: "tabLayout")
-            NotificationCenter.default.post(name: .tabLayoutDidChange, object: nil)
-        }
-    }
-
-    /// Whether background tabs unload after `tabUnloadDelay` unused, and
-    /// sooner when the Mac runs short of memory. On unless turned off.
-    var unloadsInactiveTabs: Bool {
-        get { defaults.object(forKey: "unloadInactiveTabs") as? Bool ?? true }
-        nonmutating set { defaults.set(newValue, forKey: "unloadInactiveTabs") }
-    }
-
-    var tabUnloadDelay: TabUnloadDelay {
-        get { defaults.string(forKey: "tabUnloadDelay").flatMap(TabUnloadDelay.init) ?? .thirtyMinutes }
-        nonmutating set { defaults.set(newValue.rawValue, forKey: "tabUnloadDelay") }
-    }
-
-    /// Whether the tab sidebar shows only icons.
-    var sidebarCollapsed: Bool {
-        get { defaults.bool(forKey: "sidebarCollapsed") }
-        nonmutating set { defaults.set(newValue, forKey: "sidebarCollapsed") }
     }
 
     var searchEngine: SearchEngine {
@@ -413,77 +503,6 @@ struct ProfileSettings: @unchecked Sendable {
         return query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
     }
 
-    /// The CLI to run for `kind`, with `~` expanded. Nil means look it up.
-    func agentPath(for kind: AgentKind) -> String? {
-        defaults.string(forKey: kind.pathDefaultsKey).flatMap { $0.isEmpty ? nil : NSString(string: $0).expandingTildeInPath }
-    }
-
-    func setAgentPath(_ path: String, for kind: AgentKind) {
-        let path = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        if path.isEmpty {
-            defaults.removeObject(forKey: kind.pathDefaultsKey)
-        } else {
-            defaults.set(path, forKey: kind.pathDefaultsKey)
-        }
-    }
-
-    /// Added after Tiller's own system prompt.
-    var agentInstructions: String {
-        get { defaults.string(forKey: "agentInstructions") ?? "" }
-        nonmutating set { defaults.set(newValue, forKey: "agentInstructions") }
-    }
-
-    /// Built-in tools the agent gets besides Tiller's. All off by default.
-    func agentToolEnabled(_ tool: AgentTool) -> Bool {
-        defaults.bool(forKey: tool.defaultsKey)
-    }
-
-    func setAgentTool(_ tool: AgentTool, enabled: Bool) {
-        defaults.set(enabled, forKey: tool.defaultsKey)
-    }
-
-    var agentTools: [AgentTool] { AgentTool.allCases.filter(agentToolEnabled) }
-
-    /// The model options new chats with `kind` start with, each provider
-    /// keeping its own. All the CLI's own by default.
-    func agentModelOptions(for kind: AgentChoice) -> AgentModelOptions {
-        defaults.data(forKey: "agentModelOptions.\(kind.rawValue)")
-            .flatMap { try? JSONDecoder().decode(AgentModelOptions.self, from: $0) } ?? AgentModelOptions()
-    }
-
-    func setAgentModelOptions(_ options: AgentModelOptions, for kind: AgentChoice) {
-        let key = "agentModelOptions.\(kind.rawValue)"
-        if options.isDefault {
-            defaults.removeObject(forKey: key)
-        } else {
-            defaults.set(try? JSONEncoder().encode(options), forKey: key)
-        }
-        NotificationCenter.default.post(name: .agentModelOptionsDidChange, object: nil)
-    }
-
-    /// As typed. Empty means Tiller's own empty folder.
-    var agentFolder: String {
-        get { defaults.string(forKey: "agentFolder") ?? "" }
-        nonmutating set { defaults.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "agentFolder") }
-    }
-
-    /// The folder the agent works in, with `~` expanded. Nil means Tiller's own.
-    var agentFolderPath: String? {
-        agentFolder.isEmpty ? nil : NSString(string: agentFolder).expandingTildeInPath
-    }
-
-    /// How many chats the agent panel keeps open in tabs at once.
-    var agentTabs: Int {
-        get {
-            let value = defaults.integer(forKey: "agentTabs")
-            let range = Settings.agentTabsRange
-            return value == 0 ? Settings.defaultAgentTabs : min(max(value, range.lowerBound), range.upperBound)
-        }
-        nonmutating set {
-            defaults.set(newValue, forKey: "agentTabs")
-            NotificationCenter.default.post(name: .agentTabsDidChange, object: nil)
-        }
-    }
 }
 
 /// Groups of built-in agent tools that Settings can turn on.
@@ -526,14 +545,16 @@ extension Notification.Name {
     static let agentKindDidChange = Notification.Name("TillerAgentKindDidChange")
     /// Posted when Settings' model options for new chats change.
     static let agentModelOptionsDidChange = Notification.Name("TillerAgentModelOptionsDidChange")
-    /// Posted when a profile's `agentTabs` changes.
+    /// Posted when `Settings.agentTabs` changes.
     static let agentTabsDidChange = Notification.Name("TillerAgentTabsDidChange")
     /// Posted when a profile's `showsFullURLs` changes.
     static let addressDisplayDidChange = Notification.Name("TillerAddressDisplayDidChange")
     /// Posted when `Settings.profileTabs` changes.
     static let profileTabsDidChange = Notification.Name("TillerProfileTabsDidChange")
-    /// Posted when a profile's `tabLayout` changes.
+    /// Posted when `Settings.tabLayout` changes.
     static let tabLayoutDidChange = Notification.Name("TillerTabLayoutDidChange")
+    /// Posted when `Settings.sidebarCollapsed` or `Settings.sidebarWidth` changes.
+    static let sidebarDidChange = Notification.Name("TillerSidebarDidChange")
     /// Posted when `Settings.appearance`, `Settings.theme` or `Settings.accentTheme` changes.
     static let themeDidChange = Notification.Name("TillerThemeDidChange")
 }

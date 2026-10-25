@@ -343,7 +343,7 @@ final class ScheduleEditorController: NSViewController, NSTextViewDelegate, NSTe
         addRow("Model:", modelButton)
         showModelOptions()
 
-        let tools = schedule?.tools ?? profile.settings.agentTools
+        let tools = schedule?.tools ?? Settings.agentTools
         toolBoxes = AgentTool.allCases.map { tool in
             let checkbox = NSButton(checkboxWithTitle: tool.displayName, target: nil, action: nil)
             checkbox.state = tools.contains(tool) ? .on : .off
@@ -594,7 +594,7 @@ final class ScheduleEditorController: NSViewController, NSTextViewDelegate, NSTe
         if let modelOptions {
             modelButton.title = modelOptions.summary(for: kind)
         } else {
-            let options = profile.settings.agentModelOptions(for: kind)
+            let options = Settings.agentModelOptions(for: kind)
             let name = profile.providers.displayName(kind)
             modelButton.title = "As in Settings (" + (options.isDefault ? "\(name)'s own" : options.summary(for: kind)) + ")"
         }
@@ -603,7 +603,7 @@ final class ScheduleEditorController: NSViewController, NSTextViewDelegate, NSTe
     @objc private func chooseModel(_ sender: NSButton) {
         let kind = kind
         AgentModelMenu.popUp(
-            from: sender, kind: kind, profile: profile, options: modelOptions ?? profile.settings.agentModelOptions(for: kind)
+            from: sender, kind: kind, profile: profile, options: modelOptions ?? Settings.agentModelOptions(for: kind)
         ) { [weak self] options in
             self?.modelOptions = options
             self?.showModelOptions()

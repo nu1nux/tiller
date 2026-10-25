@@ -76,7 +76,7 @@ final class ProvidersSettingsPane: NSViewController, NSTableViewDataSource, NSTa
         reload(nil)
         SettingsPane.show(
             "Run Claude Code against an Anthropic-compatible API, or Codex against an OpenAI Responses-compatible API. Each provider shows "
-                + "as an agent of its own in the panel's menu, with its own models. Keys are kept in the Keychain.",
+                + "as an agent in the panel's menu, with its own models. For every profile; keys are kept in the Keychain.",
             in: note
         )
     }

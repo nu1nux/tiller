@@ -162,17 +162,14 @@ enum ProfileControl {
                     get: { settings.launchTabs.rawValue }, set: { settings.launchTabs = try choice(LaunchTabs.self, $0, key: "launch_tabs") }),
             Setting(key: "new_tab_page", summary: "What new tabs open with", values: NewTabPage.allCases.map(\.rawValue),
                     get: { settings.newTabPage.rawValue }, set: { settings.newTabPage = try choice(NewTabPage.self, $0, key: "new_tab_page") }),
-            Setting(key: "tab_layout", summary: "Tabs along the top (horizontal) or in a sidebar (vertical)", values: TabLayout.allCases.map(\.rawValue),
-                    get: { settings.tabLayout.rawValue }, set: { settings.tabLayout = try choice(TabLayout.self, $0, key: "tab_layout") }),
-            Setting(key: "sidebar_collapsed", summary: "The tab sidebar shows only icons", values: onOff,
-                    get: { settings.sidebarCollapsed }, set: { value in
-                        let on = try flag(value, key: "sidebar_collapsed")
-                        if let window = profile.window { window.setSidebarCollapsed(on) } else { settings.sidebarCollapsed = on }
-                    }),
-            Setting(key: "unload_inactive_tabs", summary: "Unload background tabs to save memory", values: onOff,
-                    get: { settings.unloadsInactiveTabs }, set: { settings.unloadsInactiveTabs = try flag($0, key: "unload_inactive_tabs") }),
-            Setting(key: "unload_after", summary: "How long a background tab waits before it unloads", values: TabUnloadDelay.allCases.map(\.rawValue),
-                    get: { settings.tabUnloadDelay.rawValue }, set: { settings.tabUnloadDelay = try choice(TabUnloadDelay.self, $0, key: "unload_after") }),
+            Setting(key: "tab_layout", summary: "Tabs along the top (horizontal) or in a sidebar (vertical)", shared: true, values: TabLayout.allCases.map(\.rawValue),
+                    get: { Settings.tabLayout.rawValue }, set: { Settings.tabLayout = try choice(TabLayout.self, $0, key: "tab_layout") }),
+            Setting(key: "sidebar_collapsed", summary: "The tab sidebar shows only icons", shared: true, values: onOff,
+                    get: { Settings.sidebarCollapsed }, set: { Settings.sidebarCollapsed = try flag($0, key: "sidebar_collapsed") }),
+            Setting(key: "unload_inactive_tabs", summary: "Unload background tabs to save memory", shared: true, values: onOff,
+                    get: { Settings.unloadsInactiveTabs }, set: { Settings.unloadsInactiveTabs = try flag($0, key: "unload_inactive_tabs") }),
+            Setting(key: "unload_after", summary: "How long a background tab waits before it unloads", shared: true, values: TabUnloadDelay.allCases.map(\.rawValue),
+                    get: { Settings.tabUnloadDelay.rawValue }, set: { Settings.tabUnloadDelay = try choice(TabUnloadDelay.self, $0, key: "unload_after") }),
             Setting(key: "search_engine", summary: "Search engine", values: SearchEngine.allCases.map(\.rawValue),
                     get: { settings.searchEngine.rawValue }, set: { settings.searchEngine = try choice(SearchEngine.self, $0, key: "search_engine") }),
             Setting(key: "search_url", summary: "The custom search engine's URL, with %s for the query", get: { settings.searchTemplate }, set: { value in
@@ -185,58 +182,58 @@ enum ProfileControl {
                     get: { settings.searchSuggestions }, set: { settings.searchSuggestions = try flag($0, key: "search_suggestions") }),
             Setting(key: "full_urls", summary: "The address bar always shows full URLs", values: onOff,
                     get: { settings.showsFullURLs }, set: { settings.showsFullURLs = try flag($0, key: "full_urls") }),
-            Setting(key: "agent", summary: "The agent new chats use", values: providers.all.map(\.rawValue),
+            Setting(key: "agent", summary: "The agent new chats use", shared: true, values: providers.all.map(\.rawValue),
                     get: { providers.current.rawValue }, set: { value in
                         guard let picked = AgentChoice(rawValue: value), providers.exists(picked) else {
                             throw ControlError("agent is one of \(providers.all.map(\.rawValue).joined(separator: ", "))")
                         }
                         providers.current = picked
                     }),
-            Setting(key: "agent_tabs", summary: "How many chats the agent panel keeps open, 1 to 9",
-                    get: { settings.agentTabs }, set: { value in
+            Setting(key: "agent_tabs", summary: "How many chats the agent panel keeps open, 1 to 9", shared: true,
+                    get: { Settings.agentTabs }, set: { value in
                         guard let count = Int(value), Settings.agentTabsRange.contains(count) else { throw ControlError("agent_tabs is 1 to 9") }
-                        settings.agentTabs = count
+                        Settings.agentTabs = count
                     }),
-            Setting(key: "agent_tools", summary: "Built-in tools new chats get: any of read, write and shell, comma-separated, or none",
-                    get: { settings.agentTools.map(\.rawValue).joined(separator: ",") }, set: { value in
+            Setting(key: "agent_tools", summary: "Built-in tools new chats get: any of read, write and shell, comma-separated, or none", shared: true,
+                    get: { Settings.agentTools.map(\.rawValue).joined(separator: ",") }, set: { value in
                         let names = value == "none" ? [] : value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
                         let tools = try names.map { name in
                             guard let tool = AgentTool(rawValue: name) else { throw ControlError("agent_tools are any of read, write and shell, or none") }
                             return tool
                         }
-                        for tool in AgentTool.allCases { settings.setAgentTool(tool, enabled: tools.contains(tool)) }
+                        for tool in AgentTool.allCases { Settings.setAgentTool(tool, enabled: tools.contains(tool)) }
                     }),
-            Setting(key: "agent_instructions", summary: "Extra instructions after Tiller's system prompt",
-                    get: { settings.agentInstructions }, set: { settings.agentInstructions = $0 }),
-            Setting(key: "agent_folder", summary: "The folder agents work in, empty for Tiller's own",
-                    get: { settings.agentFolder }, set: { settings.agentFolder = $0 }),
-            Setting(key: "jev_model", summary: "run_task's Jev model, empty for \(ProfileSettings.defaultJevModel)",
-                    get: { settings.jevModelSetting }, set: { settings.jevModelSetting = $0 }),
-            Setting(key: "jev_text_url", summary: "run_task's text model URL, empty for \(ProfileSettings.defaultJevTextBaseURL)",
-                    get: { settings.jevTextBaseURLSetting }, set: { settings.jevTextBaseURLSetting = $0 }),
-            Setting(key: "jev_text_model", summary: "run_task's text model, empty for \(ProfileSettings.defaultJevTextModel)",
-                    get: { settings.jevTextModelSetting }, set: { settings.jevTextModelSetting = $0 }),
-            Setting(key: "jev_text_reasoning", summary: "run_task's text model may think before answering", values: onOff,
-                    get: { settings.jevTextReasoning }, set: { settings.jevTextReasoning = try flag($0, key: "jev_text_reasoning") }),
+            Setting(key: "agent_instructions", summary: "Extra instructions after Tiller's system prompt", shared: true,
+                    get: { Settings.agentInstructions }, set: { Settings.agentInstructions = $0 }),
+            Setting(key: "agent_folder", summary: "The folder agents work in, empty for Tiller's own", shared: true,
+                    get: { Settings.agentFolder }, set: { Settings.agentFolder = $0 }),
+            Setting(key: "jev_model", summary: "run_task's Jev model, empty for \(Settings.defaultJevModel)", shared: true,
+                    get: { Settings.jevModelSetting }, set: { Settings.jevModelSetting = $0 }),
+            Setting(key: "jev_text_url", summary: "run_task's text model URL, empty for \(Settings.defaultJevTextBaseURL)", shared: true,
+                    get: { Settings.jevTextBaseURLSetting }, set: { Settings.jevTextBaseURLSetting = $0 }),
+            Setting(key: "jev_text_model", summary: "run_task's text model, empty for \(Settings.defaultJevTextModel)", shared: true,
+                    get: { Settings.jevTextModelSetting }, set: { Settings.jevTextModelSetting = $0 }),
+            Setting(key: "jev_text_reasoning", summary: "run_task's text model may think before answering", shared: true, values: onOff,
+                    get: { Settings.jevTextReasoning }, set: { Settings.jevTextReasoning = try flag($0, key: "jev_text_reasoning") }),
         ]
         for kind in AgentKind.allCases {
-            table.append(Setting(key: "agent_command.\(kind.rawValue)", summary: "The file to run \(kind.displayName) from, empty to look it up",
-                                 get: { settings.agentPath(for: kind) ?? "" }, set: { settings.setAgentPath($0, for: kind) }))
+            table.append(Setting(key: "agent_command.\(kind.rawValue)", summary: "The file to run \(kind.displayName) from, empty to look it up", shared: true,
+                                 get: { Settings.agentPath(for: kind) ?? "" }, set: { Settings.setAgentPath($0, for: kind) }))
         }
         for agent in providers.all {
             let name = providers.displayName(agent)
             func options(_ change: (inout AgentModelOptions) -> Void) throws {
-                var options = settings.agentModelOptions(for: agent)
+                var options = Settings.agentModelOptions(for: agent)
                 change(&options)
-                settings.setAgentModelOptions(options.supported(by: agent), for: agent)
+                Settings.setAgentModelOptions(options.supported(by: agent), for: agent)
             }
-            table.append(Setting(key: "agent_model.\(agent.rawValue)", summary: "\(name)'s model for new chats, empty for the CLI's own",
-                                 get: { settings.agentModelOptions(for: agent).model ?? "" },
+            table.append(Setting(key: "agent_model.\(agent.rawValue)", summary: "\(name)'s model for new chats, empty for the CLI's own", shared: true,
+                                 get: { Settings.agentModelOptions(for: agent).model ?? "" },
                                  set: { value in try options { $0.model = value.isEmpty ? nil : value } }))
-            let efforts = agent.effortLevels(model: settings.agentModelOptions(for: agent).model)
+            let efforts = agent.effortLevels(model: Settings.agentModelOptions(for: agent).model)
             if !efforts.isEmpty {
-                table.append(Setting(key: "agent_effort.\(agent.rawValue)", summary: "\(name)'s thinking effort for new chats, empty for its own",
-                                     values: efforts, get: { settings.agentModelOptions(for: agent).effort ?? "" }, set: { value in
+                table.append(Setting(key: "agent_effort.\(agent.rawValue)", summary: "\(name)'s thinking effort for new chats, empty for its own", shared: true,
+                                     values: efforts, get: { Settings.agentModelOptions(for: agent).effort ?? "" }, set: { value in
                                          guard value.isEmpty || efforts.contains(value) else {
                                              throw ControlError("effort for \(name) is one of \(efforts.joined(separator: ", ")), or empty")
                                          }
@@ -245,17 +242,17 @@ enum ProfileControl {
             }
             let sizes = agent.contextSizes.map(\.value)
             if !sizes.isEmpty {
-                table.append(Setting(key: "agent_context.\(agent.rawValue)", summary: "\(name)'s context window for new chats, empty for its own",
-                                     values: sizes, get: { settings.agentModelOptions(for: agent).context ?? "" }, set: { value in
+                table.append(Setting(key: "agent_context.\(agent.rawValue)", summary: "\(name)'s context window for new chats, empty for its own", shared: true,
+                                     values: sizes, get: { Settings.agentModelOptions(for: agent).context ?? "" }, set: { value in
                                          guard value.isEmpty || sizes.contains(value) else {
                                              throw ControlError("context for \(name) is one of \(sizes.joined(separator: ", ")), or empty")
                                          }
                                          try options { $0.context = value.isEmpty ? nil : value }
                                      }))
             }
-            if agent.fastTier(model: settings.agentModelOptions(for: agent).model) != nil {
-                table.append(Setting(key: "agent_fast.\(agent.rawValue)", summary: "\(name)'s fast mode for new chats", values: onOff,
-                                     get: { settings.agentModelOptions(for: agent).fast }, set: { value in
+            if agent.fastTier(model: Settings.agentModelOptions(for: agent).model) != nil {
+                table.append(Setting(key: "agent_fast.\(agent.rawValue)", summary: "\(name)'s fast mode for new chats", shared: true, values: onOff,
+                                     get: { Settings.agentModelOptions(for: agent).fast }, set: { value in
                                          let on = try flag(value, key: "agent_fast")
                                          try options { $0.fast = on }
                                      }))
