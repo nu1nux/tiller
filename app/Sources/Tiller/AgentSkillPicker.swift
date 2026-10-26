@@ -190,7 +190,9 @@ private final class CompletionPickerRow: NSView {
         wantsLayer = true
         name.font = .systemFont(ofSize: Theme.FontSize.body, weight: .medium)
         name.lineBreakMode = .byTruncatingTail
-        name.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        // Cut before the split view's holding priority gives way, so a long
+        // tab title can't widen the panel, but after the hint.
+        name.setContentCompressionResistancePriority(.init(255), for: .horizontal)
         hint.font = .systemFont(ofSize: Theme.FontSize.caption)
         hint.textColor = Theme.tertiaryText
         // Never cut: a hint broken mid-token misleads, so `layout()` hides

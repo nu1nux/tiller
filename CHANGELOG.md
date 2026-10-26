@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+- Long tab titles in the `@` list now truncate instead of widening the agent panel past the window.
+
 ## 0.5.2
 
 - Profile Tabs' rail shows its profiles again, instead of a blank strip at the window's left.

@@ -195,6 +195,35 @@ struct ComposerTests {
         #expect(!completion.isShown)
     }
 
+    @Test func longTabTitleDoesNotWidenThePicker() {
+        let (window, composer) = makeComposer()
+        defer { window.close() }
+        // The panel holds its width at the split view's priority, below the
+        // window's, so a label that resists more would widen it.
+        let content = window.contentView!
+        let width = content.widthAnchor.constraint(equalToConstant: 340)
+        width.priority = .init(260)
+        width.isActive = true
+        let title = String(repeating: "Compress tool outputs before they reach the model. ", count: 6)
+        let tab = AgentTabMention(title: title, url: "https://github.com/", favicon: nil, isSelected: true)
+        let completion = MentionCompletion(textView: composer.textView) { [tab] }
+        let picker = completion.picker
+        picker.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(picker)
+        NSLayoutConstraint.activate([
+            picker.leadingAnchor.constraint(equalTo: composer.leadingAnchor),
+            picker.trailingAnchor.constraint(equalTo: composer.trailingAnchor),
+            picker.bottomAnchor.constraint(equalTo: composer.topAnchor, constant: -6),
+        ])
+        composer.text = "@"
+        composer.textView.setSelectedRange(NSRange(location: 1, length: 0))
+        completion.update()
+        content.layoutSubtreeIfNeeded()
+        #expect(completion.isShown)
+        #expect(content.fittingSize.width <= 340)
+        #expect(picker.frame.width <= 340 - 24)
+    }
+
     @Test func contextMeterShowsOnceUsageComes() {
         let (window, composer) = makeComposer()
         defer { window.close() }
