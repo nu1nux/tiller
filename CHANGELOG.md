@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+## 0.5.3
+
 - Long tab titles in the `@` list now truncate instead of widening the agent panel past the window.
 - Bold text next to Chinese punctuation, like `**建议层级：**P6`, now renders bold in the agent panel.
 
