@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+- Pressing `Esc` while a video or page is full screen now exits full screen.
+
 ## 0.5.3
 
 - Long tab titles in the `@` list now truncate instead of widening the agent panel past the window.

@@ -813,7 +813,15 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
     }
 
     func tab(_ tab: Tab, performKeyEquivalent event: NSEvent) -> Bool {
-        performMenuKeyEquivalent(event)
+        // Escape takes a page out of the fullscreen it asked for, as in Chrome.
+        if event.keyCode == 53,  // Escape
+            event.modifierFlags.isDisjoint(with: [.command, .control, .option, .shift])
+        {
+            guard tab === fullscreenTab else { return false }
+            tab.exitFullscreen()
+            return true
+        }
+        return performMenuKeyEquivalent(event)
     }
 
     // MARK: Camera and microphone

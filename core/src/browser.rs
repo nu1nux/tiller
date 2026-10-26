@@ -1312,6 +1312,7 @@ wrap_keyboard_handler! {
         /// Gives the menu bar first pick of Command and Control shortcuts, so
         /// Cmd+W, Cmd+R, Cmd+[ and the rest work while a page has focus. The
         /// Swift side leaves Edit menu keys alone so pages still get Cmd+Z etc.
+        /// Escape goes too, to take a fullscreen page out of it.
         fn on_pre_key_event(
             &self,
             browser: Option<&mut Browser>,
@@ -1321,7 +1322,8 @@ wrap_keyboard_handler! {
         ) -> i32 {
             let Some(event) = event else { return 0 };
             let modifiers = (sys::cef_event_flags_t::EVENTFLAG_COMMAND_DOWN.0 | sys::cef_event_flags_t::EVENTFLAG_CONTROL_DOWN.0) as u32;
-            if event.type_ != KeyEventType::RAWKEYDOWN || event.modifiers & modifiers == 0 || os_event.is_null() {
+            let escape = event.windows_key_code == 0x1B;
+            if event.type_ != KeyEventType::RAWKEYDOWN || (event.modifiers & modifiers == 0 && !escape) || os_event.is_null() {
                 return 0;
             }
             match callbacks_for(browser) {

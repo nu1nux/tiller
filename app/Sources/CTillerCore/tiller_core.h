@@ -17,7 +17,8 @@ typedef struct TillerBrowserCallbacks {
     void (*open_tab)(void *ctx, const char *url, bool background);
     // beforeunload passed. Remove the browser's view to finish closing it.
     void (*close_ready)(void *ctx);
-    // A Command or Control key press (an NSEvent *) before the page sees it.
+    // A Command or Control key press, or Escape (an NSEvent *), before
+    // the page sees it.
     // Return true if the app handled it.
     bool (*key_equivalent)(void *ctx, void *ns_event);
     // How much of the page has loaded, from 0 to 1.
