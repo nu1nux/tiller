@@ -1946,8 +1946,13 @@ enum AgentMarkdown {
     /// Bold, italics, inline code and links in one line.
     private static func inline<S: StringProtocol>(_ text: S, font: NSFont) -> NSMutableAttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        let parsed = (try? AttributedString(markdown: String(text), options: options)) ?? AttributedString(String(text))
+        let source = separatingEmphasis(String(text))
+        let parsed = (try? AttributedString(markdown: source, options: options)) ?? AttributedString(String(text))
         let result = NSMutableAttributedString(parsed)
+        if source.count != text.count {
+            result.mutableString.replaceOccurrences(of: String(emphasisSeparator), with: "", options: [],
+                                                    range: NSRange(location: 0, length: result.length))
+        }
         let whole = NSRange(location: 0, length: result.length)
         result.addAttribute(.font, value: font, range: whole)
         result.addAttribute(.foregroundColor, value: Theme.text, range: whole)
@@ -1970,6 +1975,44 @@ enum AgentMarkdown {
         result.enumerateAttribute(.link, in: whole) { value, range, _ in
             guard value != nil else { return }
             result.addAttribute(.foregroundColor, value: NSColor.linkColor, range: range)
+        }
+        return result
+    }
+
+    /// A private-use character, neither space nor punctuation to CommonMark,
+    /// that `inline` removes again after parsing.
+    private static let emphasisSeparator: Character = "\u{E000}"
+
+    /// Puts `emphasisSeparator` between a run of `*` and punctuation on one
+    /// side when text, not a space, sits on the other: CommonMark won't let
+    /// `**建议层级：**P6` close its bold, as Chinese puts no space after `：`.
+    static func separatingEmphasis(_ text: String) -> String {
+        guard text.contains("*") else { return text }
+        func isPunctuation(_ c: Character?) -> Bool { c.map { $0.isPunctuation || $0.isSymbol } ?? false }
+        func isText(_ c: Character?) -> Bool { c.map { !$0.isWhitespace && !$0.isPunctuation && !$0.isSymbol } ?? false }
+        let chars = Array(text)
+        var result = ""
+        var i = 0
+        while i < chars.count {
+            if chars[i] == "\\", i + 1 < chars.count {
+                result.append(chars[i])
+                result.append(chars[i + 1])
+                i += 2
+                continue
+            }
+            guard chars[i] == "*" else {
+                result.append(chars[i])
+                i += 1
+                continue
+            }
+            var end = i
+            while end < chars.count, chars[end] == "*" { end += 1 }
+            let before = i > 0 ? chars[i - 1] : nil
+            let after = end < chars.count ? chars[end] : nil
+            if isPunctuation(before), isText(after) { result.append(emphasisSeparator) }
+            result.append(contentsOf: chars[i..<end])
+            if isPunctuation(after), isText(before) { result.append(emphasisSeparator) }
+            i = end
         }
         return result
     }
