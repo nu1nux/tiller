@@ -7,6 +7,8 @@ beta shows what `## Unreleased` holds at the time.
 
 ## Unreleased
 
+## 0.5.4
+
 - Pressing `Esc` while a video or page is full screen now exits full screen.
 - Links like `codex://` or `mailto:` now open in their app instead of showing `ERR_UNKNOWN_URL_SCHEME`.
 - A page opening another app asks first, with **Open**, **Always Open** and **Cancel**; typed addresses don't ask.
