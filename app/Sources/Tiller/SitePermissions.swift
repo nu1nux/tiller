@@ -29,8 +29,39 @@ struct MediaRequest: Equatable {
     let devices: Set<MediaDevice>
 }
 
+/// A page's request to open an address in another app, waiting for an answer.
+struct AppRequest: Equatable {
+    let url: URL
+    /// The site asking, as `SitePermissions.origin` writes it, or empty for a
+    /// page that isn't a website, which can't be always allowed.
+    let origin: String
+    let app: ExternalApp
+
+    var scheme: String { url.scheme?.lowercased() ?? "" }
+}
+
+/// An app other than Tiller that macOS opens some addresses with.
+struct ExternalApp: Equatable {
+    let url: URL
+
+    /// As Finder names it, without .app.
+    var name: String {
+        let name = FileManager.default.displayName(atPath: url.path)
+        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+
+    /// The app macOS opens `link` with, or nil when it has none or it's Tiller.
+    static func handling(_ link: URL) -> ExternalApp? {
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: link),
+            Bundle(url: app)?.bundleIdentifier != Bundle.main.bundleIdentifier
+        else { return nil }
+        return ExternalApp(url: app)
+    }
+}
+
 /// The camera and microphone choices a profile remembers for each site, in
-/// its user defaults as `{origin: {device: "allow" | "block"}}`.
+/// its user defaults as `{origin: {device: "allow" | "block"}}`, and the apps
+/// each may open without asking, as `"app:scheme": "allow"`.
 struct SitePermissions: @unchecked Sendable {
     let defaults: UserDefaults
     private static let key = "sitePermissions"
@@ -67,6 +98,30 @@ struct SitePermissions: @unchecked Sendable {
         all[origin] = site.isEmpty ? nil : site
         save(all)
     }
+
+    /// The schemes whose links `origin` may open in their apps without asking.
+    func apps(for origin: String) -> [String] {
+        (all[origin] ?? [:]).compactMap { key, value in
+            key.hasPrefix(Self.appPrefix) && value == SitePermission.allow.rawValue
+                ? String(key.dropFirst(Self.appPrefix.count)) : nil
+        }.sorted()
+    }
+
+    func allowsApp(_ scheme: String, origin: String) -> Bool {
+        !origin.isEmpty && apps(for: origin).contains(scheme.lowercased())
+    }
+
+    /// Lets `origin` open `scheme` links in their app from now on.
+    func allowApp(_ scheme: String, origin: String) {
+        guard !origin.isEmpty, !scheme.isEmpty else { return }
+        var all = all
+        var site = all[origin] ?? [:]
+        site[Self.appPrefix + scheme.lowercased()] = SitePermission.allow.rawValue
+        all[origin] = site
+        save(all)
+    }
+
+    private static let appPrefix = "app:"
 
     func remove(_ origins: Set<String>) {
         var all = all

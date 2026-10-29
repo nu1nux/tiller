@@ -31,6 +31,9 @@ protocol TabDelegate: AnyObject {
     /// The page went away with `mediaRequests` and `mediaRefused` still up,
     /// which are cleared.
     func tabDroppedMediaRequests(_ tab: Tab)
+    /// The page asked to open a link in another app, which waits in
+    /// `appRequest` for the user. The tab's page stays where it was.
+    func tab(_ tab: Tab, requestsApp request: AppRequest)
 }
 
 extension TabDelegate {
@@ -43,6 +46,7 @@ extension TabDelegate {
     /// no camera or microphone.
     func tab(_ tab: Tab, requestsMedia request: MediaRequest) { tab.answerMediaRequest(request, allow: false) }
     func tabDroppedMediaRequests(_ tab: Tab) {}
+    func tab(_ tab: Tab, requestsApp request: AppRequest) {}
 }
 
 /// One CEF browser and the view that hosts it, in its profile's request
@@ -99,6 +103,9 @@ final class Tab {
     /// The devices macOS refused the page's last request, which the tab
     /// offers to fix in System Settings. Empty when it hasn't.
     var mediaRefused: Set<MediaDevice> = []
+    /// The page's latest request to open a link in another app, waiting for
+    /// the user. A newer one replaces it, so a page can't pile them up.
+    var appRequest: AppRequest?
 
     /// The URL and title last written to history, so each change is saved once.
     var recordedVisit: (url: String, title: String)?
@@ -272,6 +279,11 @@ final class Tab {
             media_access_changed: { ctx, audio, video in
                 guard let ctx else { return }
                 Tab.from(ctx).mediaAccessChanged(audio: audio, video: video)
+            },
+            external_url: { ctx, url, source, redirect in
+                guard let ctx, let url else { return false }
+                return Tab.from(ctx).externalURL(
+                    String(cString: url), source: source.map { String(cString: $0) } ?? "", redirect: redirect)
             }
         )
     }
@@ -458,6 +470,7 @@ final class Tab {
         paintCover = nil
         isLeavingBlank = false
         capturing = []
+        appRequest = nil
         // The core denied anything still asked when the browser closed.
         if !mediaRequests.isEmpty || !mediaRefused.isEmpty { mediaRequestsDropped() }
         delegate?.tabDidUnload(self)
@@ -553,6 +566,33 @@ final class Tab {
             guard devices != capturing else { return }
             capturing = devices
             delegate?.tabDidChange(self)
+        }
+    }
+
+    /// Hands `url` to the app macOS opens it with, at once when it was typed
+    /// into the address bar, and otherwise once the user agrees. Returns
+    /// false when no app other than Tiller opens it, which leaves Chromium
+    /// to show that it can't.
+    nonisolated private func externalURL(_ url: String, source: String, redirect: Bool) -> Bool {
+        MainActor.assumeIsolated {
+            guard let link = URL(string: url), let app = ExternalApp.handling(link) else { return false }
+            let typed = typedNavigation && !redirect && url == self.url
+            if url == self.url {
+                // The address bar goes back to the page, which stays.
+                typedNavigation = false
+                let never = committedURL == url
+                self.url = never ? "about:blank" : committedURL
+                if never { committedURL = self.url }
+                isLeavingBlank = false
+                delegate?.tabDidChange(self)
+            }
+            if typed {
+                NSWorkspace.shared.open(link)
+                return true
+            }
+            let website = source.hasPrefix("https://") || source.hasPrefix("http://")
+            delegate?.tab(self, requestsApp: AppRequest(url: link, origin: website ? SitePermissions.origin(source) : "", app: app))
+            return true
         }
     }
 

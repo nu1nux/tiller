@@ -3,8 +3,10 @@ import AppKit
 /// Asks whether a site may use the camera or microphone: a glass card at the
 /// top of the page naming the site, with Block, Allow Once and Always Allow.
 /// Closing it denies the request this once. When macOS refuses Tiller the
-/// devices instead, it says so and offers System Settings.
-final class MediaPermissionBar: NSView {
+/// devices instead, it says so and offers System Settings. It also asks
+/// whether a site may open a link in another app, with Cancel, Open and
+/// Always Open.
+final class PermissionBar: NSView {
     enum Answer {
         /// Denied, and denied from now on.
         case block
@@ -19,6 +21,7 @@ final class MediaPermissionBar: NSView {
         case request(MediaRequest)
         /// macOS refuses Tiller these devices.
         case refused(Set<MediaDevice>)
+        case app(AppRequest)
     }
 
     var onAnswer: ((Answer) -> Void)?
@@ -145,32 +148,62 @@ final class MediaPermissionBar: NSView {
 
     func show(_ content: Content) {
         self.content = content
-        let devices: Set<MediaDevice>
         let text: NSMutableAttributedString
         let font = NSFont.systemFont(ofSize: Theme.FontSize.body)
         let bold = NSFont.systemFont(ofSize: Theme.FontSize.body, weight: .semibold)
         switch content {
         case .request(let request):
-            devices = request.devices
             text = NSMutableAttributedString(
                 string: SitePermissions.displayName(request.origin), attributes: [.font: bold, .foregroundColor: Theme.text])
             text.append(NSAttributedString(
                 string: " wants to use your \(MediaDevice.names(request.devices)).",
                 attributes: [.font: font, .foregroundColor: Theme.text]))
         case .refused(let refused):
-            devices = refused
             text = NSMutableAttributedString(
                 string: "macOS isn't letting Tiller use your \(MediaDevice.names(refused)). "
                     + "Turn Tiller on in Privacy & Security, then reload the page.",
                 attributes: [.font: font, .foregroundColor: Theme.text])
+        case .app(let request):
+            let site = request.origin.isEmpty ? "This page" : SitePermissions.displayName(request.origin)
+            text = NSMutableAttributedString(string: site, attributes: [.font: bold, .foregroundColor: Theme.text])
+            text.append(NSAttributedString(
+                string: " wants to open \(request.app.name).", attributes: [.font: font, .foregroundColor: Theme.text]))
         }
         label.attributedStringValue = text
         setAccessibilityLabel(text.string)
+        switch content {
+        case .request(let request): showDevices(request.devices)
+        case .refused(let refused): showDevices(refused)
+        case .app(let request):
+            let image = NSWorkspace.shared.icon(forFile: request.app.url.path)
+            image.size = NSSize(width: Theme.Symbol.bar + 4, height: Theme.Symbol.bar + 4)
+            image.accessibilityDescription = request.app.name
+            icon.image = image
+            icon.contentTintColor = nil
+        }
+        let (block, once, always) = if case .app = content {
+            ("Cancel", "Open", "Always Open")
+        } else {
+            ("Block", "Allow Once", "Always Allow")
+        }
+        blockButton.title = block
+        allowOnceButton.title = once
+        allowButton.title = always
+        blockButton.isHidden = if case .refused = content { true } else { false }
+        allowOnceButton.isHidden = blockButton.isHidden
+        // Only a website's choice is kept.
+        allowButton.isHidden = switch content {
+        case .request: false
+        case .refused: true
+        case .app(let request): request.origin.isEmpty
+        }
+        settingsButton.isHidden = !blockButton.isHidden
+    }
+
+    private func showDevices(_ devices: Set<MediaDevice>) {
         let symbol = devices.contains(.camera) ? "video.fill" : "mic.fill"
         icon.image = Theme.symbol(symbol, size: Theme.Symbol.bar, label: MediaDevice.names(devices))
-        let asking = if case .request = content { true } else { false }
-        for button in [blockButton, allowOnceButton, allowButton] { button.isHidden = !asking }
-        settingsButton.isHidden = asking
+        icon.contentTintColor = Theme.danger
     }
 
     @objc private func block(_ sender: Any?) { onAnswer?(.block) }

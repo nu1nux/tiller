@@ -57,6 +57,11 @@ typedef struct TillerBrowserCallbacks {
     void (*media_requests_dropped)(void *ctx);
     // The page started or stopped using the microphone or the camera. May be NULL.
     void (*media_access_changed)(void *ctx, bool audio, bool video);
+    // The page, or a redirect, is going to `url`, whose scheme Chromium
+    // can't load, such as mailto: or codex:. `source` is the page it's
+    // going from, or empty. Return true to call the navigation off, as for
+    // a URL the app opens in another app; false lets it fail. May be NULL.
+    bool (*external_url)(void *ctx, const char *url, const char *source, bool redirect);
 } TillerBrowserCallbacks;
 
 // Static version string. Do not free.

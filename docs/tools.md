@@ -159,7 +159,7 @@ tiller settings                    # every setting, its value and what it takes
 tiller settings get search_engine
 tiller settings set tab_layout vertical
 tiller settings set agent_model.claude opus
-tiller sites                       # camera and microphone choices
+tiller sites                       # camera and microphone choices, and the apps each opens
 tiller sites set meet.google.com --camera allow --microphone block
 tiller sites rm meet.google.com
 tiller passwords [list github]     # sites and usernames; passwords are never printed

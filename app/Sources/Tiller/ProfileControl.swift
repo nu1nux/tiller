@@ -323,6 +323,8 @@ enum ProfileControl {
             let sites = permissions.all.keys.sorted().map { origin -> [String: Any] in
                 var site: [String: Any] = ["site": origin]
                 for (device, choice) in permissions.permissions(for: origin) { site[device.rawValue] = choice.rawValue }
+                let apps = permissions.apps(for: origin)
+                if !apps.isEmpty { site["apps"] = apps }
                 return site
             }
             return ["sites": sites]

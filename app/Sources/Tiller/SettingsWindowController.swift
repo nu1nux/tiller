@@ -979,8 +979,9 @@ final class PasswordsSettingsPane: NSViewController, NSTableViewDataSource, NSTa
 // MARK: Sites
 
 /// The camera and microphone choices saved for each site, with a pop-up to
-/// change each one and buttons to forget sites. A site with no choice for a
-/// device asks again the next time it wants it.
+/// change each one, the apps each may open without asking, and buttons to
+/// forget sites. A site with no choice for a device asks again the next time
+/// it wants it.
 final class SitePermissionsSettingsPane: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSMenuItemValidation {
     private let table = SettingsTableView()
     private let removeButton = NSButton(title: "Remove", target: nil, action: nil)
@@ -1006,7 +1007,10 @@ final class SitePermissionsSettingsPane: NSViewController, NSTableViewDataSource
     required init?(coder: NSCoder) { fatalError() }
 
     override func loadView() {
-        for (id, title, width) in [("site", "Website", 340.0), ("camera", "Camera", 120.0), ("microphone", "Microphone", 120.0)] {
+        for (id, title, width) in [
+            ("site", "Website", 240.0), ("camera", "Camera", 100.0), ("microphone", "Microphone", 100.0),
+            ("apps", "Opens", 140.0),
+        ] {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(id))
             column.title = title
             column.width = width
@@ -1070,8 +1074,8 @@ final class SitePermissionsSettingsPane: NSViewController, NSTableViewDataSource
         removeAllButton.isEnabled = !origins.isEmpty
         placeholder?.isHidden = !origins.isEmpty
         SettingsPane.show(
-            "When a site asks for your camera or microphone, Always Allow and Block are saved here. "
-                + "Removing a site makes it ask again.",
+            "When a site asks for your camera or microphone, Always Allow and Block are saved here, "
+                + "and so is Always Open when it opens a link in another app. Removing a site makes it ask again.",
             in: note
         )
     }
@@ -1085,6 +1089,12 @@ final class SitePermissionsSettingsPane: NSViewController, NSTableViewDataSource
     func tableView(_ tableView: NSTableView, viewFor column: NSTableColumn?, row: Int) -> NSView? {
         guard origins.indices.contains(row), let id = column?.identifier.rawValue else { return nil }
         let origin = origins[row]
+        if id == "apps" {
+            let names = permissions.apps(for: origin).map { Self.appName($0) }
+            let cell = SettingsPane.textCell(tableView, names.joined(separator: ", "))
+            cell.textField?.toolTip = names.joined(separator: "\n")
+            return cell
+        }
         guard let device = MediaDevice(rawValue: id) else {
             let cell = SettingsPane.textCell(tableView, SitePermissions.displayName(origin))
             cell.textField?.toolTip = origin
@@ -1103,6 +1113,11 @@ final class SitePermissionsSettingsPane: NSViewController, NSTableViewDataSource
         popUp.action = #selector(choose(_:))
         popUp.setAccessibilityLabel("\(SitePermissions.displayName(origin)) \(device.rawValue.capitalized)")
         return popUp
+    }
+
+    /// The app that opens `scheme` links, or the scheme when none does now.
+    private static func appName(_ scheme: String) -> String {
+        URL(string: "\(scheme):").flatMap(ExternalApp.handling)?.name ?? "\(scheme):"
     }
 
     func tableView(_ tableView: NSTableView, typeSelectStringFor column: NSTableColumn?, row: Int) -> String? {
@@ -1142,8 +1157,9 @@ final class SitePermissionsSettingsPane: NSViewController, NSTableViewDataSource
     @objc private func removeAll(_ sender: Any?) {
         guard let window = view.window else { return }
         let alert = NSAlert()
-        alert.messageText = "Forget the camera and microphone choices of all sites?"
-        alert.informativeText = "Each of the \(origins.count) sites asks again the next time it wants them."
+        alert.messageText = "Forget the saved choices of all sites?"
+        alert.informativeText = "Each of the \(origins.count) sites asks again the next time it wants your camera, "
+            + "microphone or another app."
         alert.addButton(withTitle: "Remove All")
         alert.buttons[0].hasDestructiveAction = true
         alert.addButton(withTitle: "Cancel")

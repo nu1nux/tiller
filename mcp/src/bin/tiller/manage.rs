@@ -191,7 +191,9 @@ pub fn sites(cx: &Context) -> Result<(), Error> {
     let value = request(&mut browser, method, params)?;
     let line = |site: &Value| {
         let choice = |device: &str| site[device].as_str().unwrap_or("ask").to_owned();
-        println!("{}  camera {}  microphone {}", plain(&site["site"]), choice("camera"), choice("microphone"));
+        let apps: Vec<&str> = site["apps"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+        let apps = if apps.is_empty() { String::new() } else { format!("  opens {}:", apps.join(":, ")) };
+        println!("{}  camera {}  microphone {}{apps}", plain(&site["site"]), choice("camera"), choice("microphone"));
     };
     cx.emit(&value, |v| match method {
         "sites.list" => v["sites"].as_array().into_iter().flatten().for_each(line),

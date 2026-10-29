@@ -37,6 +37,7 @@ pub struct Callbacks {
     pub media_permission: Option<unsafe extern "C" fn(*mut c_void, u64, *const c_char, bool, bool)>,
     pub media_requests_dropped: Option<unsafe extern "C" fn(*mut c_void)>,
     pub media_access_changed: Option<unsafe extern "C" fn(*mut c_void, bool, bool)>,
+    pub external_url: Option<unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char, bool) -> bool>,
 }
 
 /// A tab waiting for the browser CEF creates for a page's `window.open`.
@@ -993,7 +994,51 @@ wrap_request_handler! {
             open_in_tab(browser, target_url, background);
             1
         }
+
+        /// A page, or a redirect, going to an address another app handles,
+        /// such as mailto: or codex:. The app decides whether to open it
+        /// there, which calls the navigation off before Chromium can show
+        /// its unknown scheme error. Addresses it leaves load as before.
+        fn on_before_browse(
+            &self,
+            browser: Option<&mut Browser>,
+            frame: Option<&mut Frame>,
+            request: Option<&mut Request>,
+            _user_gesture: i32,
+            is_redirect: i32,
+        ) -> i32 {
+            let Some(request) = request else { return 0 };
+            let url = CefString::from(&request.url());
+            if !is_external(&url.to_string()) {
+                return 0;
+            }
+            let Some(cb) = tab_callbacks_for(browser) else { return 0 };
+            let Some(f) = cb.external_url else { return 0 };
+            // The page the link is on, or for a tab with none yet, as one a
+            // link opened, the page it came from.
+            let source = frame
+                .map(|f| CefString::from(&f.url()))
+                .filter(|u| !u.to_string().is_empty())
+                .unwrap_or_else(|| CefString::from(&request.referrer_url()));
+            let (url, source) = (to_cstring(Some(&url)), to_cstring(Some(&source)));
+            i32::from(unsafe { f(cb.ctx, url.as_ptr(), source.as_ptr(), is_redirect != 0) })
+        }
     }
+}
+
+/// Schemes Chromium loads itself. Any other belongs to some other app.
+const BROWSER_SCHEMES: &[&str] = &[
+    "http", "https", "file", "data", "blob", "about", "javascript", "filesystem", "ws", "wss",
+    "chrome", "chrome-extension", "chrome-untrusted", "chrome-error", "devtools", "view-source",
+];
+
+/// Whether `url` has a scheme Chromium can't load, such as mailto: or codex:.
+fn is_external(url: &str) -> bool {
+    let Some((scheme, _)) = url.split_once(':') else { return false };
+    let mut chars = scheme.chars();
+    let valid = chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    valid && !BROWSER_SCHEMES.contains(&scheme.to_ascii_lowercase().as_str())
 }
 
 const MENU_OPEN_LINK: i32 = sys::cef_menu_id_t::MENU_ID_USER_FIRST as i32;

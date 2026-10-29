@@ -74,6 +74,12 @@ macOS also has to let Tiller use each device, and asks the first time a site is 
 
 A tab recording from the camera or microphone has a red dot on its icon, and its tooltip says which. Saved choices are listed in Settings > Sites, where each one can be changed or removed. Screen sharing isn't supported yet: pages that ask for it are refused.
 
+## Links to other apps
+
+A link whose address belongs to another app, such as `mailto:`, `zoommtg:` or `codex:`, goes to that app, as it does in Chrome and Safari. An address typed into the address bar opens at once. One a page opens, by a link, a script or a redirect, brings up a card like the camera's naming the site and the app: **Open** hands it over this once, **Always Open** lets the site open that app's links from now on without asking, and **Cancel** or the close button drops it. The page stays where it was either way. Only a website's choice is kept, so a page that isn't one, such as a local file, has no **Always Open**. A newer request from the same tab replaces one still waiting. An address no app on the Mac handles shows Chromium's error page.
+
+Sites allowed to open apps are listed in Settings > Sites, in the Opens column; removing a site makes it ask again.
+
 ## Find and zoom
 
 | Shortcut | Action |

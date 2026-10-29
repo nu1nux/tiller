@@ -78,15 +78,16 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
     }()
     /// Whether the find bar is up. It stays in the view while it fades out.
     private var findBarShown = false
-    /// Asks about the selected tab's first camera or microphone request.
-    private lazy var mediaBar: MediaPermissionBar = {
-        let bar = MediaPermissionBar()
-        bar.onAnswer = { [weak self] answer in self?.answerMediaBar(answer) }
+    /// Asks about the selected tab's first camera or microphone request, or
+    /// its request to open another app.
+    private lazy var permissionBar: PermissionBar = {
+        let bar = PermissionBar()
+        bar.onAnswer = { [weak self] answer in self?.answerPermissionBar(answer) }
         bar.onOpenSettings = { [weak self] in self?.openMediaSettings() }
         return bar
     }()
     /// Whether the media bar is up. It stays in the view while it fades out.
-    private var mediaBarShown = false
+    private var permissionBarShown = false
     /// Shown over the selected tab while it is blank.
     private lazy var startPage: StartPageView = {
         let view = StartPageView(profile: profile)
@@ -381,7 +382,7 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
         selectedTab = tab
         if changed {
             jevOverlay.selectionChanged()
-            updateMediaBar()
+            updatePermissionBar()
         }
         tab.lastActive = Date()
         tab.hostView.isHidden = false
@@ -559,7 +560,7 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
             // after the others are gone.
             if closingAll && !next.isStarted {
                 tabStrip.update(tabs: tabs, selected: nil)
-                updateMediaBar()
+                updatePermissionBar()
             } else {
                 select(next, resumeSaving: false)
             }
@@ -836,12 +837,12 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
             grantMedia(request, in: tab)
         case .ask:
             tab.mediaRequests.append(request)
-            if tab === selectedTab { updateMediaBar() }
+            if tab === selectedTab { updatePermissionBar() }
         }
     }
 
     func tabDroppedMediaRequests(_ tab: Tab) {
-        if tab === selectedTab { updateMediaBar() }
+        if tab === selectedTab { updatePermissionBar() }
     }
 
     /// Grants `request` once macOS lets Tiller use its devices, asking macOS
@@ -854,18 +855,32 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
             tab.answerMediaRequest(request, allow: refused.isEmpty)
             guard !refused.isEmpty else { return }
             tab.mediaRefused = refused
-            if tab === self?.selectedTab { self?.updateMediaBar() }
+            if tab === self?.selectedTab { self?.updatePermissionBar() }
         }
     }
 
-    private func answerMediaBar(_ answer: MediaPermissionBar.Answer) {
+    private func answerPermissionBar(_ answer: PermissionBar.Answer) {
         // A click on a bar fading out answers nothing.
-        guard mediaBarShown, let tab = selectedTab, let content = mediaBar.content else { return }
+        guard permissionBarShown, let tab = selectedTab, let content = permissionBar.content else { return }
+        if case .app(let request) = content {
+            guard tab.appRequest == request else { return updatePermissionBar() }
+            tab.appRequest = nil
+            switch answer {
+            case .allowAlways:
+                profile.settings.sitePermissions.allowApp(request.scheme, origin: request.origin)
+                NSWorkspace.shared.open(request.url)
+            case .allowOnce:
+                NSWorkspace.shared.open(request.url)
+            case .block, .dismiss:
+                break
+            }
+            return updatePermissionBar()
+        }
         guard case .request(let request) = content else {
             tab.mediaRefused = []
-            return updateMediaBar()
+            return updatePermissionBar()
         }
-        guard tab.mediaRequests.contains(request) else { return updateMediaBar() }
+        guard tab.mediaRequests.contains(request) else { return updatePermissionBar() }
         let permissions = profile.settings.sitePermissions
         switch answer {
         case .block:
@@ -889,62 +904,77 @@ final class BrowserWindowController: NSResponder, NSToolbarDelegate,
                 }
             }
         }
-        updateMediaBar()
+        updatePermissionBar()
     }
 
     private func openMediaSettings() {
         guard let tab = selectedTab else { return }
         SystemMediaAccess.openSettings(for: tab.mediaRefused)
         tab.mediaRefused = []
-        updateMediaBar()
+        updatePermissionBar()
+    }
+
+    // MARK: Other apps
+
+    /// Opens the link at once when the site may always open its app, and
+    /// otherwise asks on the tab once it is in front.
+    func tab(_ tab: Tab, requestsApp request: AppRequest) {
+        if profile.settings.sitePermissions.allowsApp(request.scheme, origin: request.origin) {
+            NSWorkspace.shared.open(request.url)
+            return
+        }
+        tab.appRequest = request
+        if tab === selectedTab { updatePermissionBar() }
     }
 
     /// Shows the selected tab's first request, or what macOS refused it, at
     /// the top left of the page, over everything else there. Hides the bar
     /// when there is neither.
-    private func updateMediaBar() {
-        let content: MediaPermissionBar.Content? =
+    private func updatePermissionBar() {
+        let content: PermissionBar.Content? =
             if let request = selectedTab?.mediaRequests.first {
                 .request(request)
+            } else if let request = selectedTab?.appRequest {
+                .app(request)
             } else if let refused = selectedTab?.mediaRefused, !refused.isEmpty {
                 .refused(refused)
             } else {
                 nil
             }
         guard let content else {
-            guard mediaBarShown else { return }
-            mediaBarShown = false
+            guard permissionBarShown else { return }
+            permissionBarShown = false
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Theme.reduceMotion ? 0 : Theme.Duration.quick
-                mediaBar.animator().alphaValue = 0
+                permissionBar.animator().alphaValue = 0
             } completionHandler: { [weak self] in
                 MainActor.assumeIsolated {
-                    guard let self, !self.mediaBarShown else { return }
-                    self.mediaBar.removeFromSuperview()
+                    guard let self, !self.permissionBarShown else { return }
+                    self.permissionBar.removeFromSuperview()
                 }
             }
             return
         }
-        mediaBar.show(content)
+        permissionBar.show(content)
         // Put back on top, as a tab selected since covers it.
-        if contentView.subviews.last !== mediaBar {
-            mediaBar.removeFromSuperview()
-            mediaBar.translatesAutoresizingMaskIntoConstraints = false
-            contentView.addSubview(mediaBar, positioned: .above, relativeTo: nil)
+        if contentView.subviews.last !== permissionBar {
+            permissionBar.removeFromSuperview()
+            permissionBar.translatesAutoresizingMaskIntoConstraints = false
+            contentView.addSubview(permissionBar, positioned: .above, relativeTo: nil)
             NSLayoutConstraint.activate([
-                mediaBar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Theme.Padding.row),
-                mediaBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Theme.Padding.panel),
-                mediaBar.trailingAnchor.constraint(
+                permissionBar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Theme.Padding.row),
+                permissionBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Theme.Padding.panel),
+                permissionBar.trailingAnchor.constraint(
                     lessThanOrEqualTo: contentView.trailingAnchor, constant: -Theme.Padding.panel),
             ])
         }
-        guard !mediaBarShown else { return }
-        mediaBarShown = true
-        mediaBar.alphaValue = 0
-        withEasing(Theme.Duration.quick) { mediaBar.animator().alphaValue = 1 }
-        mediaBar.dropIn()
-        NSAccessibility.post(element: mediaBar, notification: .announcementRequested, userInfo: [
-            .announcement: mediaBar.accessibilityLabel() ?? "",
+        guard !permissionBarShown else { return }
+        permissionBarShown = true
+        permissionBar.alphaValue = 0
+        withEasing(Theme.Duration.quick) { permissionBar.animator().alphaValue = 1 }
+        permissionBar.dropIn()
+        NSAccessibility.post(element: permissionBar, notification: .announcementRequested, userInfo: [
+            .announcement: permissionBar.accessibilityLabel() ?? "",
             .priority: NSAccessibilityPriorityLevel.high.rawValue,
         ])
     }

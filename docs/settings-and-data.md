@@ -29,7 +29,7 @@ Tiller > Settings… (Cmd+,) opens the Settings of the front window's profile. I
 | Agent | Model: pick a CLI, then its model, thinking effort, context window and fast mode (see [Model and effort](agent.md#model-and-effort)) | the CLI's own | next new chat, for every profile |
 | Agent | Allowed tools and working folder | none, and an empty folder in the profile's folder | next new chat, for every profile |
 | Agent | Extra instructions, added after Tiller's system prompt | empty | next new chat, for every profile |
-| Sites | Each site's camera and microphone choice: Ask, Allow or Block, or the site removed | none | the site's next request |
+| Sites | Each site's camera and microphone choice: Ask, Allow or Block, the apps it may open, or the site removed | none | the site's next request |
 | Skills | Each skill in the library: on or off, added from a folder, archive or Git, or removed | none | a chat's next agent start, for every profile |
 | Scheduled | Each scheduled prompt: on or off, its name, agent, tools, rule and prompt, added, edited, run now or removed | none | right away |
 | Profiles | Show every open profile in one window, with a rail to switch between them, stored as `profileTabs` (see [Profile Tabs](browser.md#profile-tabs)). Also View > Profile Tabs | off | right away, for every profile |

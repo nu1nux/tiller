@@ -65,6 +65,25 @@ struct SitePermissionsTests {
         #expect(store.all.isEmpty)
     }
 
+    @Test func remembersAppsBesideDevices() {
+        let (store, cleanup) = makeStore()
+        defer { cleanup() }
+        let site = "https://chatgpt.com"
+        store.set(.allow, for: [.camera], origin: site)
+        #expect(!store.allowsApp("codex", origin: site))
+        store.allowApp("Codex", origin: site)
+        #expect(store.allowsApp("codex", origin: site))
+        #expect(!store.allowsApp("zoommtg", origin: site))
+        #expect(!store.allowsApp("codex", origin: "https://example.com"))
+        // A page that isn't a website is never allowed.
+        store.allowApp("codex", origin: "")
+        #expect(!store.allowsApp("codex", origin: ""))
+        #expect(store.apps(for: site) == ["codex"])
+        #expect(store.decision(for: [.camera], origin: site) == .allow)
+        store.remove([site])
+        #expect(!store.allowsApp("codex", origin: site))
+    }
+
     @Test func originDropsThePathAndKeepsThePort() {
         #expect(SitePermissions.origin("https://meet.google.com/") == "https://meet.google.com")
         #expect(SitePermissions.origin("https://Meet.Google.com/abc-defg-hij?x=1") == "https://meet.google.com")
@@ -82,11 +101,11 @@ struct SitePermissionsTests {
 
 @Suite(.serialized)
 @MainActor
-struct MediaPermissionBarTests {
+struct PermissionBarTests {
     @Test func requestOffersTheThreeAnswers() {
         _ = NSApplication.shared
-        let bar = MediaPermissionBar()
-        var answers: [MediaPermissionBar.Answer] = []
+        let bar = PermissionBar()
+        var answers: [PermissionBar.Answer] = []
         bar.onAnswer = { answers.append($0) }
         bar.show(.request(MediaRequest(id: 1, origin: "https://meet.google.com", devices: [.camera, .microphone])))
         #expect(bar.accessibilityLabel() == "meet.google.com wants to use your camera and microphone.")
@@ -98,9 +117,26 @@ struct MediaPermissionBarTests {
         #expect(answers == [.allowOnce, .block, .allowAlways])
     }
 
+    @Test func appRequestOffersOpen() {
+        _ = NSApplication.shared
+        let bar = PermissionBar()
+        let app = ExternalApp(url: URL(fileURLWithPath: "/System/Applications/Mail.app"))
+        let link = URL(string: "mailto:a@example.com")!
+        bar.show(.app(AppRequest(url: link, origin: "https://example.com", app: app)))
+        #expect(bar.accessibilityLabel() == "example.com wants to open Mail.")
+        #expect(bar.blockButton.title == "Cancel" && bar.allowOnceButton.title == "Open")
+        #expect(!bar.allowButton.isHidden && bar.settingsButton.isHidden)
+        // Not a website: nothing to remember it by.
+        bar.show(.app(AppRequest(url: link, origin: "", app: app)))
+        #expect(bar.accessibilityLabel() == "This page wants to open Mail.")
+        #expect(bar.allowButton.isHidden && !bar.allowOnceButton.isHidden)
+        bar.show(.request(MediaRequest(id: 1, origin: "https://example.com", devices: [.camera])))
+        #expect(bar.blockButton.title == "Block" && !bar.allowButton.isHidden)
+    }
+
     @Test func refusalOffersSystemSettings() {
         _ = NSApplication.shared
-        let bar = MediaPermissionBar()
+        let bar = PermissionBar()
         var opened = false
         bar.onOpenSettings = { opened = true }
         bar.show(.refused([.microphone]))
