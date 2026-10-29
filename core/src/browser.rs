@@ -97,9 +97,9 @@ enum FirstLoad {
     /// A tab on about:blank, hidden from the app, until DevTools has given
     /// its renderer Chrome's client hints. Then it loads this URL.
     Blank(String),
-    /// The tab is loading its URL. Once that commits, about:blank leaves its
+    /// The tab is loading this URL. Once that commits, about:blank leaves its
     /// history.
-    Loading,
+    Loading(String),
     /// A popup, whose first page CEF has on its way before DevTools can reach
     /// it. `committed` once the page has, to be reloaded if that was before
     /// the client hints.
@@ -360,7 +360,7 @@ pub fn create(context_id: i32, tab_id: i32, parent_view: *mut c_void, width: i32
 fn load_blank(id: i32) {
     let url = FIRST_LOADS.with_borrow_mut(|map| match map.remove(&id) {
         Some(FirstLoad::Blank(url)) => {
-            map.insert(id, FirstLoad::Loading);
+            map.insert(id, FirstLoad::Loading(url.clone()));
             Some(url)
         }
         Some(other) => {
@@ -370,6 +370,25 @@ fn load_blank(id: i32) {
         None => None,
     });
     if let Some(url) = url && let Some(frame) = get(id).and_then(|b| b.main_frame()) {
+        frame.load_url(Some(&CefString::from(url.as_str())));
+        // A renderer not yet ready can drop the load, leaving the tab blank.
+        let mut task = RetryFirstLoadTask::new(id);
+        post_delayed_task(ThreadId::UI, Some(&mut task), 3000);
+    }
+}
+
+/// Loads a tab's URL again when the first load never started and the tab
+/// still sits idle on its hidden about:blank.
+fn retry_first_load(id: i32) {
+    let url = FIRST_LOADS.with_borrow(|map| match map.get(&id) {
+        Some(FirstLoad::Loading(url)) => Some(url.clone()),
+        _ => None,
+    });
+    let Some(url) = url else { return };
+    let Some(browser) = get(id) else { return };
+    let Some(frame) = browser.main_frame() else { return };
+    let current = CefString::from(&frame.url()).to_string();
+    if browser.is_loading() == 0 && (current.is_empty() || current == "about:blank") {
         frame.load_url(Some(&CefString::from(url.as_str())));
     }
 }
@@ -383,7 +402,7 @@ fn on_blank(id: i32) -> bool {
 fn first_load_committed(browser: &Browser, url: &str) {
     let id = browser.identifier();
     let done = FIRST_LOADS.with_borrow_mut(|map| match map.get_mut(&id) {
-        Some(FirstLoad::Loading) if url != "about:blank" => map.remove(&id).is_some(),
+        Some(FirstLoad::Loading(_)) if url != "about:blank" => map.remove(&id).is_some(),
         Some(FirstLoad::Popup { committed }) => {
             *committed = true;
             false
@@ -738,6 +757,18 @@ wrap_task! {
     impl Task {
         fn execute(&self) {
             load_blank(self.browser_id);
+        }
+    }
+}
+
+wrap_task! {
+    struct RetryFirstLoadTask {
+        browser_id: i32,
+    }
+
+    impl Task {
+        fn execute(&self) {
+            retry_first_load(self.browser_id);
         }
     }
 }
@@ -1509,12 +1540,23 @@ wrap_life_span_handler! {
                         media_access: false,
                     })
                 });
-                FIRST_LOADS.with_borrow_mut(|map| map.insert(id, FirstLoad::Popup { committed: false }));
+                // The page may have started, or even committed, before the
+                // tab could hear of it, so the tab learns where it is now.
+                let url = browser.main_frame().map(|f| CefString::from(&f.url()).to_string()).unwrap_or_default();
+                let committed = !url.is_empty() && url != "about:blank";
+                FIRST_LOADS.with_borrow_mut(|map| map.insert(id, FirstLoad::Popup { committed }));
                 if let Some(host) = host {
                     attach_devtools(id, &host);
                 }
                 if let Some(f) = callbacks.created {
                     unsafe { f(callbacks.ctx, id) };
+                }
+                if committed && let Some(f) = callbacks.address_changed {
+                    let url = to_cstring(Some(&CefString::from(url.as_str())));
+                    unsafe { f(callbacks.ctx, url.as_ptr()) };
+                }
+                if browser.is_loading() != 0 && let Some(f) = callbacks.loading_state_changed {
+                    unsafe { f(callbacks.ctx, true, browser.can_go_back() != 0, browser.can_go_forward() != 0) };
                 }
                 return;
             }

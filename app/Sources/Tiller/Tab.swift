@@ -136,6 +136,9 @@ final class Tab {
     /// True while such a page waits: its load's end and progress came
     /// before it painted, so only the wait shows it.
     private var waitsOutPaint = false
+    /// The longest a cover stays up, should the page's arrival and load
+    /// never be heard of.
+    private static let coverLimit: TimeInterval = 2
 
     var displayTitle: String {
         if !title.isEmpty && title != url { return title }
@@ -191,6 +194,12 @@ final class Tab {
         let cover = PaintCoverView(frame: hostView.bounds)
         hostView.addSubview(cover, positioned: .above, relativeTo: nil)
         paintCover = cover
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.coverLimit) { [weak self, weak cover] in
+            MainActor.assumeIsolated {
+                guard let self, let cover, self.paintCover === cover else { return }
+                self.showPage()
+            }
+        }
     }
 
     private func makeCallbacks() -> TillerBrowserCallbacks {
